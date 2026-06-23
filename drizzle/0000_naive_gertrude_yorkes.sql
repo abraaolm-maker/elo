@@ -2,7 +2,7 @@ CREATE TABLE `companies` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`plan` text DEFAULT 'starter' NOT NULL,
-	`created_at` text DEFAULT '(datetime(''now''))' NOT NULL
+	`created_at` text DEFAULT (datetime('now')) NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `investigation_workers` (
@@ -11,7 +11,7 @@ CREATE TABLE `investigation_workers` (
 	`worker_id` text NOT NULL,
 	`status` text DEFAULT 'pending' NOT NULL,
 	`saturation_score` integer DEFAULT 0 NOT NULL,
-	`created_at` text DEFAULT '(datetime(''now''))' NOT NULL,
+	`created_at` text DEFAULT (datetime('now')) NOT NULL,
 	FOREIGN KEY (`investigation_id`) REFERENCES `investigations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`worker_id`) REFERENCES `workers`(`id`) ON UPDATE no action ON DELETE no action
 );
@@ -25,7 +25,7 @@ CREATE TABLE `investigations` (
 	`problem_description` text NOT NULL,
 	`ishikawa_category` text,
 	`status` text DEFAULT 'pending' NOT NULL,
-	`created_at` text DEFAULT '(datetime(''now''))' NOT NULL,
+	`created_at` text DEFAULT (datetime('now')) NOT NULL,
 	`completed_at` text,
 	FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`manager_id`) REFERENCES `managers`(`id`) ON UPDATE no action ON DELETE no action
@@ -37,7 +37,7 @@ CREATE TABLE `managers` (
 	`name` text NOT NULL,
 	`email` text NOT NULL,
 	`password_hash` text NOT NULL,
-	`created_at` text DEFAULT '(datetime(''now''))' NOT NULL,
+	`created_at` text DEFAULT (datetime('now')) NOT NULL,
 	FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -54,7 +54,7 @@ CREATE TABLE `messages` (
 	`transcription_status` text DEFAULT 'not_applicable' NOT NULL,
 	`retry_count` integer DEFAULT 0 NOT NULL,
 	`key_points_extracted` text,
-	`created_at` text DEFAULT '(datetime(''now''))' NOT NULL,
+	`created_at` text DEFAULT (datetime('now')) NOT NULL,
 	FOREIGN KEY (`investigation_id`) REFERENCES `investigations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`worker_id`) REFERENCES `workers`(`id`) ON UPDATE no action ON DELETE no action
 );
@@ -69,7 +69,7 @@ CREATE TABLE `reports` (
 	`ishikawa_breakdown` text,
 	`sources_summary` text,
 	`recommendations` text,
-	`generated_at` text DEFAULT '(datetime(''now''))' NOT NULL,
+	`generated_at` text DEFAULT (datetime('now')) NOT NULL,
 	FOREIGN KEY (`investigation_id`) REFERENCES `investigations`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
@@ -83,7 +83,7 @@ CREATE TABLE `workers` (
 	`whatsapp_number` text NOT NULL,
 	`anonymous_alias` text NOT NULL,
 	`is_active` integer DEFAULT true NOT NULL,
-	`created_at` text DEFAULT '(datetime(''now''))' NOT NULL,
+	`created_at` text DEFAULT (datetime('now')) NOT NULL,
 	FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint

@@ -1,4 +1,4 @@
-import { requireAuth } from '@/lib/auth/middleware'
+import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
 import { db, schema } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
 
@@ -9,7 +9,7 @@ interface RouteParams {
 export async function GET(_request: Request, { params }: RouteParams): Promise<Response> {
   try {
     const { id } = await params
-    const session = await requireAuth()
+    const session = await requireAuth(_request)
 
     // Buscar investigação validando que pertence à company do manager
     const investigation = await db
@@ -64,6 +64,7 @@ export async function GET(_request: Request, { params }: RouteParams): Promise<R
       },
     }, { status: 200 })
   } catch (error) {
+    if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     console.error('[investigations/:id GET]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
   }

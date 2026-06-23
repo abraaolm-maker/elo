@@ -1,11 +1,11 @@
-import { requireAuth } from '@/lib/auth/middleware'
+import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
 import { db, schema } from '@/lib/db'
 import { eq, and, inArray, count } from 'drizzle-orm'
 import crypto from 'crypto'
 
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   try {
-    const session = await requireAuth()
+    const session = await requireAuth(request)
 
     const investigations = await db
       .select({
@@ -42,6 +42,7 @@ export async function GET(): Promise<Response> {
 
     return Response.json({ data: result }, { status: 200 })
   } catch (error) {
+    if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     console.error('[investigations GET]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
   }
@@ -49,7 +50,7 @@ export async function GET(): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const session = await requireAuth()
+    const session = await requireAuth(request)
 
     const body = await request.json() as Record<string, unknown>
     const title = typeof body.title === 'string' ? body.title.trim() : ''
@@ -110,6 +111,7 @@ export async function POST(request: Request): Promise<Response> {
 
     return Response.json({ data: investigation }, { status: 201 })
   } catch (error) {
+    if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     console.error('[investigations POST]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
   }

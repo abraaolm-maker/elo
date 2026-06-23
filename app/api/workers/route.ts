@@ -1,4 +1,4 @@
-import { requireAuth } from '@/lib/auth/middleware'
+import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
 import { db, schema } from '@/lib/db'
 import { eq, and, count } from 'drizzle-orm'
 import crypto from 'crypto'
@@ -20,9 +20,9 @@ function validateWhatsAppNumber(phone: string): string | null {
   return null
 }
 
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   try {
-    const session = await requireAuth()
+    const session = await requireAuth(request)
 
     const workers = await db
       .select({
@@ -51,6 +51,7 @@ export async function GET(): Promise<Response> {
 
     return Response.json({ data: masked }, { status: 200 })
   } catch (error) {
+    if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     console.error('[workers GET]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
   }
@@ -58,7 +59,7 @@ export async function GET(): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const session = await requireAuth()
+    const session = await requireAuth(request)
 
     const body = await request.json() as Record<string, unknown>
     const name = typeof body.name === 'string' ? body.name.trim() : ''
@@ -123,6 +124,7 @@ export async function POST(request: Request): Promise<Response> {
 
     return Response.json({ data: newWorker }, { status: 201 })
   } catch (error) {
+    if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     console.error('[workers POST]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
   }

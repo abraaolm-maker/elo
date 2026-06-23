@@ -1,11 +1,12 @@
 import { sqliteTable, text, integer, unique } from 'drizzle-orm/sqlite-core'
+import { sql } from 'drizzle-orm'
 
 // ─── COMPANIES ────────────────────────────────────────────────────────────────
 export const companies = sqliteTable('companies', {
   id:         text('id').primaryKey(),
   name:       text('name').notNull(),
   plan:       text('plan').notNull().default('starter'),
-  created_at: text('created_at').notNull().default("(datetime('now'))"),
+  created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
 })
 
 // ─── MANAGERS ─────────────────────────────────────────────────────────────────
@@ -15,7 +16,7 @@ export const managers = sqliteTable('managers', {
   name:       text('name').notNull(),
   email:      text('email').notNull().unique(),
   password_hash: text('password_hash').notNull(),
-  created_at: text('created_at').notNull().default("(datetime('now'))"),
+  created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
 })
 
 // ─── WORKERS ──────────────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ export const workers = sqliteTable('workers', {
   whatsapp_number:  text('whatsapp_number').notNull(),
   anonymous_alias:  text('anonymous_alias').notNull(),
   is_active:        integer('is_active', { mode: 'boolean' }).notNull().default(true),
-  created_at:       text('created_at').notNull().default("(datetime('now'))"),
+  created_at:       text('created_at').notNull().default(sql`(datetime('now'))`),
 }, t => ({
   uniq_company_phone: unique().on(t.company_id, t.whatsapp_number),
 }))
@@ -42,7 +43,7 @@ export const investigations = sqliteTable('investigations', {
   problem_description: text('problem_description').notNull(),
   ishikawa_category:   text('ishikawa_category'),
   status:              text('status').notNull().default('pending'),
-  created_at:          text('created_at').notNull().default("(datetime('now'))"),
+  created_at:          text('created_at').notNull().default(sql`(datetime('now'))`),
   completed_at:        text('completed_at'),
 })
 
@@ -53,7 +54,7 @@ export const investigation_workers = sqliteTable('investigation_workers', {
   worker_id:        text('worker_id').notNull().references(() => workers.id),
   status:           text('status').notNull().default('pending'),
   saturation_score: integer('saturation_score').notNull().default(0),
-  created_at:       text('created_at').notNull().default("(datetime('now'))"),
+  created_at:       text('created_at').notNull().default(sql`(datetime('now'))`),
 }, t => ({
   uniq_inv_worker: unique().on(t.investigation_id, t.worker_id),
 }))
@@ -71,7 +72,7 @@ export const messages = sqliteTable('messages', {
   transcription_status: text('transcription_status').notNull().default('not_applicable'),
   retry_count:          integer('retry_count').notNull().default(0),
   key_points_extracted: text('key_points_extracted'), // JSON string
-  created_at:           text('created_at').notNull().default("(datetime('now'))"),
+  created_at:           text('created_at').notNull().default(sql`(datetime('now'))`),
 })
 
 // ─── REPORTS ──────────────────────────────────────────────────────────────────
@@ -84,7 +85,7 @@ export const reports = sqliteTable('reports', {
   ishikawa_breakdown:      text('ishikawa_breakdown'),  // JSON string
   sources_summary:         text('sources_summary'),     // JSON string
   recommendations:         text('recommendations'),     // JSON string (array)
-  generated_at:            text('generated_at').notNull().default("(datetime('now'))"),
+  generated_at:            text('generated_at').notNull().default(sql`(datetime('now'))`),
 })
 
 // ─── Tipos inferidos ──────────────────────────────────────────────────────────

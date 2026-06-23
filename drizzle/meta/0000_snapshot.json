@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "60dab2d2-2ac5-4128-8d7e-5dbd608899cf",
+  "id": "775e9d87-ca48-450e-ae5c-8d85b179568e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "companies": {
@@ -35,7 +35,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {},
@@ -90,7 +90,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {
@@ -194,7 +194,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         },
         "completed_at": {
           "name": "completed_at",
@@ -281,7 +281,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {
@@ -401,7 +401,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {
@@ -510,7 +510,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {
@@ -607,7 +607,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'(datetime(''now''))'"
+          "default": "(datetime('now'))"
         }
       },
       "indexes": {

@@ -1,4 +1,4 @@
-import { requireAuth } from '@/lib/auth/middleware'
+import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
 import { db, schema } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
 
@@ -9,7 +9,7 @@ interface RouteParams {
 export async function PATCH(request: Request, { params }: RouteParams): Promise<Response> {
   try {
     const { id } = await params
-    const session = await requireAuth()
+    const session = await requireAuth(request)
 
     const body = await request.json() as Record<string, unknown>
 
@@ -63,6 +63,7 @@ export async function PATCH(request: Request, { params }: RouteParams): Promise<
 
     return Response.json({ data: updated }, { status: 200 })
   } catch (error) {
+    if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     console.error('[workers PATCH]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
   }

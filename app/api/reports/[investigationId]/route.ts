@@ -1,4 +1,4 @@
-import { requireAuth } from '@/lib/auth/middleware'
+import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
 import { db, schema } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
 import { generateReport } from '@/lib/ai/report-generator'
@@ -19,7 +19,7 @@ export async function GET(
 ) {
   try {
     const { investigationId } = await params
-    const session = await requireAuth()
+    const session = await requireAuth(_req)
 
     // Verificar que a investigação pertence à company
     const investigation = await db
@@ -52,6 +52,7 @@ export async function GET(
       },
     }, { status: 200 })
   } catch (error) {
+    if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     console.error('[GET /api/reports/[investigationId]]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
   }
@@ -65,7 +66,7 @@ export async function POST(
 ) {
   try {
     const { investigationId } = await params
-    const session = await requireAuth()
+    const session = await requireAuth(_req)
 
     const investigation = await db
       .select()
@@ -173,6 +174,7 @@ export async function POST(
       } : null,
     }, { status: 200 })
   } catch (error) {
+    if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     console.error('[POST /api/reports/[investigationId]]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
   }

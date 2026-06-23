@@ -39,9 +39,30 @@ export async function verifySession(token: string): Promise<SessionPayload | nul
   }
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const cookieStore = await cookies()
-  const token = cookieStore.get(COOKIE_NAME)?.value
+export async function getSession(request?: Request): Promise<SessionPayload | null> {
+  let token: string | undefined
+
+  if (request) {
+    const cookieHeader = request.headers.get('cookie') ?? ''
+    const match = cookieHeader
+      .split(';')
+      .map(c => c.trim())
+      .find(c => c.startsWith(`${COOKIE_NAME}=`))
+    if (match) {
+      const eqIdx = match.indexOf('=')
+      token = eqIdx >= 0 ? match.slice(eqIdx + 1) : undefined
+    }
+  }
+
+  if (!token) {
+    try {
+      const cookieStore = await cookies()
+      token = cookieStore.get(COOKIE_NAME)?.value
+    } catch {
+      // next/headers não disponível em contexto de API route
+    }
+  }
+
   if (!token) return null
   return verifySession(token)
 }
