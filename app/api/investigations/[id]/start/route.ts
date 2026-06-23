@@ -1,78 +1,72 @@
-import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/auth/middleware'
+import { db, schema } from '@/lib/db'
+import { eq, and } from 'drizzle-orm'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/sender'
+import crypto from 'crypto'
 
 interface RouteParams {
   params: Promise<{ id: string }>
 }
 
-interface InvestigationRow {
-  id: string
-  title: string
-  problem_description: string
-  status: string
-}
-
-interface IWRow {
-  id: string
-  worker_id: string
-  workers: { anonymous_alias: string; role: string; role_description: string | null; whatsapp_number: string } | null
-}
-
 export async function POST(_request: Request, { params }: RouteParams): Promise<Response> {
   try {
     const { id } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+    const session = await requireAuth()
 
-    // Buscar investigação e validar status
-    const { data: invData, error: invError } = await supabase
-      .from('investigations')
-      .select('id, title, problem_description, status')
-      .eq('id', id)
-      .single()
+    // Buscar investigação e validar que pertence à company
+    const investigation = await db
+      .select()
+      .from(schema.investigations)
+      .where(
+        and(
+          eq(schema.investigations.id, id),
+          eq(schema.investigations.company_id, session.companyId)
+        )
+      )
+      .get()
 
-    if (invError || !invData) {
+    if (!investigation) {
       return Response.json({ error: 'Investigação não encontrada.' }, { status: 404 })
     }
 
-    const investigation = invData as InvestigationRow
     if (investigation.status !== 'pending') {
       return Response.json({ error: 'Apenas investigações com status pending podem ser iniciadas.' }, { status: 400 })
     }
 
     // Atualizar investigação para 'active'
-    await supabase
-      .from('investigations')
-      .update({ status: 'active' })
-      .eq('id', id)
+    await db
+      .update(schema.investigations)
+      .set({ status: 'active' })
+      .where(eq(schema.investigations.id, id))
 
-    // Buscar workers participantes com dados necessários para o engine
-    const { data: iwData } = await supabase
-      .from('investigation_workers')
-      .select('id, worker_id, workers(anonymous_alias, role, role_description, whatsapp_number)')
-      .eq('investigation_id', id)
+    // Buscar workers participantes
+    const iwRows = await db
+      .select({
+        iw_id: schema.investigation_workers.id,
+        worker_id: schema.investigation_workers.worker_id,
+        role: schema.workers.role,
+        role_description: schema.workers.role_description,
+        whatsapp_number: schema.workers.whatsapp_number,
+      })
+      .from(schema.investigation_workers)
+      .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
+      .where(eq(schema.investigation_workers.investigation_id, id))
 
-    const investigationWorkers = ((iwData ?? []) as unknown as IWRow[])
-
-    // Atualizar todos para 'active' em lote
-    await supabase
-      .from('investigation_workers')
-      .update({ status: 'active' })
-      .eq('investigation_id', id)
+    // Atualizar todos os investigation_workers para 'active'
+    await db
+      .update(schema.investigation_workers)
+      .set({ status: 'active' })
+      .where(eq(schema.investigation_workers.investigation_id, id))
 
     // Para cada worker: gerar primeira pergunta via IA e enviar via WhatsApp
-    const sendFirstQuestion = async (iw: IWRow): Promise<void> => {
-      const worker = Array.isArray(iw.workers) ? iw.workers[0] : iw.workers
-      if (!worker) return
-
+    const sendFirstQuestion = async (iw: typeof iwRows[number]): Promise<void> => {
       let engineOutput
       try {
         engineOutput = await runInvestigationEngine({
           problemDescription: investigation.problem_description,
-          workerRole: worker.role,
-          workerRoleDescription: worker.role_description ?? '',
+          workerRole: iw.role,
+          workerRoleDescription: iw.role_description ?? '',
           messageHistory: [],
           crossValidationContext: '',
         })
@@ -84,7 +78,8 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
       if (engineOutput.action !== 'ask_question') return
 
       // Salvar outbound message
-      const { error: msgErr } = await supabase.from('messages').insert({
+      await db.insert(schema.messages).values({
+        id: crypto.randomUUID(),
         investigation_id: id,
         worker_id: iw.worker_id,
         direction: 'outbound',
@@ -94,27 +89,24 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
         retry_count: 0,
       })
 
-      if (msgErr) {
-        console.error('[investigations start] message insert error', msgErr)
-        return
-      }
-
-      // Enviar via WhatsApp
-      await sendWhatsAppMessage({
-        number: worker.whatsapp_number,
+      // Enviar via WhatsApp (falha não bloqueia)
+      sendWhatsAppMessage({
+        number: iw.whatsapp_number,
         text: engineOutput.next_question,
+      }).catch(err => {
+        console.error('[investigations start] whatsapp send failed (non-fatal)', err)
       })
     }
 
-    // Enviar em paralelo (resiliente: um erro não bloqueia os outros)
-    await Promise.allSettled(investigationWorkers.map(sendFirstQuestion))
+    // Enviar em paralelo
+    await Promise.allSettled(iwRows.map(sendFirstQuestion))
 
     // Retornar investigação atualizada
-    const { data: updated } = await supabase
-      .from('investigations')
-      .select('id, title, status, created_at')
-      .eq('id', id)
-      .single()
+    const updated = await db
+      .select({ id: schema.investigations.id, title: schema.investigations.title, status: schema.investigations.status, created_at: schema.investigations.created_at })
+      .from(schema.investigations)
+      .where(eq(schema.investigations.id, id))
+      .get()
 
     return Response.json({ data: updated }, { status: 200 })
   } catch (error) {

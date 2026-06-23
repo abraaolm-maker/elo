@@ -12,6 +12,7 @@ interface WorkerFormProps {
 }
 
 export function WorkerForm({ onSuccess, onCancel }: WorkerFormProps) {
+  const [name, setName] = useState('')
   const [role, setRole] = useState('')
   const [roleDescription, setRoleDescription] = useState('')
   const [whatsappNumber, setWhatsappNumber] = useState('')
@@ -19,6 +20,7 @@ export function WorkerForm({ onSuccess, onCancel }: WorkerFormProps) {
   const [loading, setLoading] = useState(false)
 
   function validateForm(): string | null {
+    if (!name.trim()) return 'O nome é obrigatório.'
     if (!role.trim()) return 'O cargo é obrigatório.'
     if (!whatsappNumber.trim()) return 'O número WhatsApp é obrigatório.'
     if (!/^\d+$/.test(whatsappNumber)) return 'O número deve conter apenas dígitos.'
@@ -45,6 +47,7 @@ export function WorkerForm({ onSuccess, onCancel }: WorkerFormProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          name: name.trim(),
           role: role.trim(),
           role_description: roleDescription.trim(),
           whatsapp_number: whatsappNumber.trim(),
@@ -68,6 +71,17 @@ export function WorkerForm({ onSuccess, onCancel }: WorkerFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="name">Nome</Label>
+        <Input
+          id="name"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Ex: João Silva"
+          required
+        />
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="role">Cargo</Label>
         <Input

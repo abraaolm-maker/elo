@@ -8,25 +8,33 @@ interface SendMessageResult {
   error?: string
 }
 
+// Meta WhatsApp Business Cloud API
+// Docs: https://developers.facebook.com/docs/whatsapp/cloud-api/messages
 export async function sendWhatsAppMessage(params: SendMessageParams): Promise<SendMessageResult> {
-  const apiUrl = process.env.WHATSAPP_API_URL
-  const apiKey = process.env.WHATSAPP_API_KEY
-  const instanceName = process.env.WHATSAPP_INSTANCE_NAME
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
 
-  if (!apiUrl || !apiKey || !instanceName) {
+  if (!accessToken || !phoneNumberId) {
+    console.error('[whatsapp-sender] WHATSAPP_ACCESS_TOKEN ou WHATSAPP_PHONE_NUMBER_ID não configurados')
     return { success: false, error: 'WhatsApp env vars not configured' }
   }
 
   try {
     const response = await fetch(
-      `${apiUrl}/message/sendText/${instanceName}`,
+      `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: apiKey,
+          'Authorization': `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ number: params.number, text: params.text }),
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: params.number,
+          type: 'text',
+          text: { body: params.text },
+        }),
       }
     )
 

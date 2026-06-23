@@ -1,85 +1,67 @@
-import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/auth/middleware'
+import { db, schema } from '@/lib/db'
+import { eq, and } from 'drizzle-orm'
 
 interface RouteParams {
   params: Promise<{ id: string }>
 }
 
-interface InvestigationRow {
-  id: string
-  title: string
-  problem_description: string
-  status: string
-  created_at: string
-  completed_at: string | null
-}
-
-interface IWRow {
-  id: string
-  worker_id: string
-  status: string
-  saturation_score: number
-  workers: { anonymous_alias: string; role: string } | { anonymous_alias: string; role: string }[] | null
-}
-
-interface MessageRow {
-  id: string
-  worker_id: string
-  direction: string
-  content: string | null
-  content_type: string
-  created_at: string
-}
-
 export async function GET(_request: Request, { params }: RouteParams): Promise<Response> {
   try {
     const { id } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+    const session = await requireAuth()
 
-    // Buscar investigação (RLS filtra por company)
-    const { data: invData, error: invError } = await supabase
-      .from('investigations')
-      .select('id, title, problem_description, status, created_at, completed_at')
-      .eq('id', id)
-      .single()
+    // Buscar investigação validando que pertence à company do manager
+    const investigation = await db
+      .select()
+      .from(schema.investigations)
+      .where(
+        and(
+          eq(schema.investigations.id, id),
+          eq(schema.investigations.company_id, session.companyId)
+        )
+      )
+      .get()
 
-    if (invError || !invData) {
+    if (!investigation) {
       return Response.json({ error: 'Investigação não encontrada.' }, { status: 404 })
     }
 
-    const investigation = invData as InvestigationRow
-
     // Buscar workers participantes com alias e cargo
-    const { data: iwData } = await supabase
-      .from('investigation_workers')
-      .select('id, worker_id, status, saturation_score, workers(anonymous_alias, role)')
-      .eq('investigation_id', id)
-      .order('created_at', { ascending: true })
-
-    const workers = ((iwData ?? []) as unknown as IWRow[]).map(row => {
-      const w = Array.isArray(row.workers) ? row.workers[0] : row.workers
-      return {
-        iw_id: row.id,
-        worker_id: row.worker_id,
-        alias: w?.anonymous_alias ?? 'Desconhecido',
-        role: w?.role ?? '',
-        status: row.status,
-        saturation_score: row.saturation_score,
-      }
-    })
+    const iwRows = await db
+      .select({
+        iw_id: schema.investigation_workers.id,
+        worker_id: schema.investigation_workers.worker_id,
+        status: schema.investigation_workers.status,
+        saturation_score: schema.investigation_workers.saturation_score,
+        alias: schema.workers.anonymous_alias,
+        role: schema.workers.role,
+      })
+      .from(schema.investigation_workers)
+      .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
+      .where(eq(schema.investigation_workers.investigation_id, id))
+      .orderBy(schema.investigation_workers.created_at)
 
     // Buscar mensagens (sem whatsapp_number)
-    const { data: msgData } = await supabase
-      .from('messages')
-      .select('id, worker_id, direction, content, content_type, created_at')
-      .eq('investigation_id', id)
-      .order('created_at', { ascending: true })
-
-    const messages = ((msgData ?? []) as MessageRow[]).filter(m => m.content !== null)
+    const messages = await db
+      .select({
+        id: schema.messages.id,
+        worker_id: schema.messages.worker_id,
+        direction: schema.messages.direction,
+        content: schema.messages.content,
+        content_type: schema.messages.content_type,
+        created_at: schema.messages.created_at,
+      })
+      .from(schema.messages)
+      .where(eq(schema.messages.investigation_id, id))
+      .orderBy(schema.messages.created_at)
 
     return Response.json({
-      data: { investigation, workers, messages },
+      data: {
+        investigation,
+        workers: iwRows,
+        messages: messages.filter(m => m.content !== null),
+      },
     }, { status: 200 })
   } catch (error) {
     console.error('[investigations/:id GET]', error)

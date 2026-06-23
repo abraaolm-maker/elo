@@ -1,6 +1,8 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
-import { notFound } from 'next/navigation'
+import { getSession } from '@/lib/auth/session'
+import { db, schema } from '@/lib/db'
+import { eq, and } from 'drizzle-orm'
+import { notFound, redirect } from 'next/navigation'
 import { ReportView, type ReportData } from '@/components/reports/ReportView'
 import { GenerateReportButton } from './GenerateReportButton'
 import type { IshikawaBreakdownOutput, SourceSummaryOutput } from '@/lib/ai/types'
@@ -9,64 +11,56 @@ interface RouteParams {
   params: Promise<{ id: string }>
 }
 
-interface InvestigationRow {
-  id: string
-  title: string
-  status: string
-}
-
-interface RawReport {
-  id: string
-  investigation_id: string
-  root_cause: string
-  confidence_score: number
-  confidence_justification: string | null
-  ishikawa_breakdown: unknown
-  sources_summary: unknown
-  recommendations: string[]
-  generated_at: string
-}
-
-function parseReport(raw: RawReport, investigationId: string): ReportData {
-  return {
-    id: raw.id,
-    investigation_id: investigationId,
-    root_cause: raw.root_cause,
-    confidence_score: raw.confidence_score,
-    confidence_justification: raw.confidence_justification,
-    ishikawa_breakdown: raw.ishikawa_breakdown as IshikawaBreakdownOutput,
-    sources_summary: raw.sources_summary as SourceSummaryOutput[],
-    recommendations: raw.recommendations,
-    generated_at: raw.generated_at,
-  }
+function parseJsonSafe<T>(raw: string | null): T | null {
+  if (!raw) return null
+  try { return JSON.parse(raw) as T } catch { return null }
 }
 
 export default async function ReportPage({ params }: RouteParams) {
-  // [id] is the investigation_id
   const { id: investigationId } = await params
-  const supabase = await createClient()
+  const session = await getSession()
+  if (!session) redirect('/login')
 
-  const [{ data: invData, error: invError }, { data: reportData }] = await Promise.all([
-    supabase
-      .from('investigations')
-      .select('id, title, status')
-      .eq('id', investigationId)
-      .single(),
-    supabase
-      .from('reports')
-      .select('id, investigation_id, root_cause, confidence_score, confidence_justification, ishikawa_breakdown, sources_summary, recommendations, generated_at')
-      .eq('investigation_id', investigationId)
-      .maybeSingle(),
+  const [investigation, report] = await Promise.all([
+    db
+      .select({ id: schema.investigations.id, title: schema.investigations.title, status: schema.investigations.status })
+      .from(schema.investigations)
+      .where(
+        and(
+          eq(schema.investigations.id, investigationId),
+          eq(schema.investigations.company_id, session.companyId)
+        )
+      )
+      .get(),
+
+    db
+      .select()
+      .from(schema.reports)
+      .where(eq(schema.reports.investigation_id, investigationId))
+      .get(),
   ])
 
-  if (invError || !invData) notFound()
+  if (!investigation) notFound()
 
-  const investigation = invData as InvestigationRow
   const canGenerate = investigation.status === 'completed' || investigation.status === 'saturated'
+
+  let reportData: ReportData | null = null
+  if (report) {
+    reportData = {
+      id: report.id,
+      investigation_id: report.investigation_id,
+      root_cause: report.root_cause,
+      confidence_score: report.confidence_score,
+      confidence_justification: report.confidence_justification,
+      ishikawa_breakdown: parseJsonSafe<IshikawaBreakdownOutput>(report.ishikawa_breakdown),
+      sources_summary: parseJsonSafe<SourceSummaryOutput[]>(report.sources_summary),
+      recommendations: parseJsonSafe<string[]>(report.recommendations) ?? [],
+      generated_at: report.generated_at,
+    }
+  }
 
   return (
     <div className="space-y-6">
-      {/* Navegação */}
       <div>
         <Link
           href={`/investigations/${investigationId}`}
@@ -79,7 +73,7 @@ export default async function ReportPage({ params }: RouteParams) {
       {reportData ? (
         <ReportView
           investigationTitle={investigation.title}
-          report={parseReport(reportData as RawReport, investigationId)}
+          report={reportData}
         />
       ) : canGenerate ? (
         <div className="flex flex-col items-start gap-4">

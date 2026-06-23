@@ -1,62 +1,76 @@
-import type { ParsedWhatsAppMessage } from './types'
+import type { MetaWebhookPayload, ParsedWhatsAppMessage } from './types'
 
-function extractPhoneNumber(remoteJid: string): string {
-  return remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '')
-}
-
-function isEvolutionPayload(payload: unknown): payload is {
-  event: string
-  data: {
-    key: { remoteJid: string; id: string; fromMe?: boolean }
-    message: Record<string, unknown>
-    messageType: string
-  }
-} {
+function isMetaPayload(payload: unknown): payload is MetaWebhookPayload {
   if (typeof payload !== 'object' || payload === null) return false
   const p = payload as Record<string, unknown>
-  if (p.event !== 'messages.upsert') return false
-  if (typeof p.data !== 'object' || p.data === null) return false
-  const data = p.data as Record<string, unknown>
-  if (typeof data.key !== 'object' || data.key === null) return false
-  const key = data.key as Record<string, unknown>
-  if (typeof key.remoteJid !== 'string' || typeof key.id !== 'string') return false
-  if (typeof data.messageType !== 'string') return false
-  return true
+  return (
+    p.object === 'whatsapp_business_account' &&
+    Array.isArray(p.entry)
+  )
 }
 
+/**
+ * Parseia o payload do Meta WhatsApp Business Cloud API.
+ * Retorna null para status updates, mensagens do próprio sistema, ou payloads inválidos.
+ * Retorna APENAS a primeira mensagem do primeiro entry/change.
+ */
 export function parseWhatsAppPayload(payload: unknown): ParsedWhatsAppMessage | null {
-  if (!isEvolutionPayload(payload)) return null
+  if (!isMetaPayload(payload)) return null
 
-  const { data } = payload
-  const phoneNumber = extractPhoneNumber(data.key.remoteJid)
-  const messageId = data.key.id
-  const isFromMe = data.key.fromMe === true
+  const firstEntry = payload.entry[0]
+  if (!firstEntry) return null
 
-  if (data.messageType === 'conversation') {
-    const message = data.message as Record<string, unknown>
-    if (typeof message.conversation !== 'string') return null
+  const firstChange = firstEntry.changes[0]
+  if (!firstChange) return null
+
+  const { value } = firstChange
+  const messages = value.messages
+  if (!messages || messages.length === 0) return null
+
+  const msg = messages[0]
+  const phoneNumber = msg.from
+
+  if (msg.type === 'text') {
     return {
       phoneNumber,
-      messageId,
+      messageId: msg.id,
       type: 'text',
-      content: message.conversation,
-      isFromMe,
+      content: msg.text.body,
+      isFromMe: false,
     }
   }
 
-  if (data.messageType === 'audioMessage') {
-    const message = data.message as Record<string, unknown>
-    if (typeof message.audioMessage !== 'object' || message.audioMessage === null) return null
-    const audio = message.audioMessage as Record<string, unknown>
-    if (typeof audio.url !== 'string') return null
+  if (msg.type === 'audio') {
+    // content = Media ID do Meta (será usado para baixar o arquivo)
     return {
       phoneNumber,
-      messageId,
+      messageId: msg.id,
       type: 'audio',
-      content: audio.url,
-      isFromMe,
+      content: msg.audio.id,
+      isFromMe: false,
     }
   }
 
   return null
+}
+
+/**
+ * Resolve um Meta Media ID para uma URL temporária de download.
+ * https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media
+ */
+export async function resolveMetaMediaUrl(mediaId: string): Promise<string> {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
+  if (!accessToken) throw new Error('WHATSAPP_ACCESS_TOKEN not configured')
+
+  const res = await fetch(`https://graph.facebook.com/v19.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+
+  if (!res.ok) {
+    throw new Error(`Failed to get media URL: HTTP ${res.status}`)
+  }
+
+  const data = await res.json() as { url?: string }
+  if (!data.url) throw new Error('No URL in media response')
+  return data.url
 }

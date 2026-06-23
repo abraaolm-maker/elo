@@ -1,5 +1,7 @@
-import { createClient } from '@/lib/supabase/server'
-import { notFound } from 'next/navigation'
+import { getSession } from '@/lib/auth/session'
+import { db, schema } from '@/lib/db'
+import { eq, and } from 'drizzle-orm'
+import { notFound, redirect } from 'next/navigation'
 import { InvestigationDetail } from '@/components/investigations/InvestigationDetail'
 import type { InvestigationData, WorkerParticipant, MessageItem } from '@/components/investigations/InvestigationDetail'
 
@@ -7,71 +9,72 @@ interface RouteParams {
   params: Promise<{ id: string }>
 }
 
-interface InvestigationRow {
-  id: string
-  title: string
-  problem_description: string
-  status: string
-  created_at: string
-  completed_at: string | null
-}
-
-interface IWRow {
-  id: string
-  worker_id: string
-  status: string
-  saturation_score: number
-  workers: { anonymous_alias: string; role: string } | { anonymous_alias: string; role: string }[] | null
-}
-
-interface MessageRow {
-  id: string
-  worker_id: string
-  direction: string
-  content: string | null
-  content_type: string
-  created_at: string
-}
-
 export default async function InvestigationPage({ params }: RouteParams) {
   const { id } = await params
-  const supabase = await createClient()
+  const session = await getSession()
+  if (!session) redirect('/login')
 
-  const [{ data: invData, error }, { data: iwData }, { data: msgData }] = await Promise.all([
-    supabase
-      .from('investigations')
-      .select('id, title, problem_description, status, created_at, completed_at')
-      .eq('id', id)
-      .single(),
-    supabase
-      .from('investigation_workers')
-      .select('id, worker_id, status, saturation_score, workers(anonymous_alias, role)')
-      .eq('investigation_id', id)
-      .order('created_at', { ascending: true }),
-    supabase
-      .from('messages')
-      .select('id, worker_id, direction, content, content_type, created_at')
-      .eq('investigation_id', id)
-      .order('created_at', { ascending: true }),
+  const [investigation, iwRows, msgRows] = await Promise.all([
+    db
+      .select()
+      .from(schema.investigations)
+      .where(
+        and(
+          eq(schema.investigations.id, id),
+          eq(schema.investigations.company_id, session.companyId)
+        )
+      )
+      .get(),
+
+    db
+      .select({
+        iw_id: schema.investigation_workers.id,
+        worker_id: schema.investigation_workers.worker_id,
+        status: schema.investigation_workers.status,
+        saturation_score: schema.investigation_workers.saturation_score,
+        alias: schema.workers.anonymous_alias,
+        role: schema.workers.role,
+      })
+      .from(schema.investigation_workers)
+      .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
+      .where(eq(schema.investigation_workers.investigation_id, id))
+      .orderBy(schema.investigation_workers.created_at),
+
+    db
+      .select({
+        id: schema.messages.id,
+        worker_id: schema.messages.worker_id,
+        direction: schema.messages.direction,
+        content: schema.messages.content,
+        content_type: schema.messages.content_type,
+        created_at: schema.messages.created_at,
+      })
+      .from(schema.messages)
+      .where(eq(schema.messages.investigation_id, id))
+      .orderBy(schema.messages.created_at),
   ])
 
-  if (error || !invData) notFound()
+  if (!investigation) notFound()
 
-  const investigation = invData as InvestigationData
+  const invData: InvestigationData = {
+    id: investigation.id,
+    title: investigation.title,
+    problem_description: investigation.problem_description,
+    status: investigation.status,
+    created_at: investigation.created_at,
+    completed_at: investigation.completed_at,
+  }
 
-  const workers: WorkerParticipant[] = ((iwData ?? []) as unknown as IWRow[]).map(row => {
-    const w = Array.isArray(row.workers) ? row.workers[0] : row.workers
-    return {
-      iw_id: row.id,
-      worker_id: row.worker_id,
-      alias: w?.anonymous_alias ?? 'Desconhecido',
-      role: w?.role ?? '',
-      status: row.status,
-      saturation_score: row.saturation_score,
-    }
-  })
+  const workers: WorkerParticipant[] = iwRows.map(row => ({
+    iw_id: row.iw_id,
+    worker_id: row.worker_id,
+    alias: row.alias,
+    role: row.role,
+    status: row.status,
+    saturation_score: row.saturation_score,
+  }))
 
-  const messages: MessageItem[] = ((msgData ?? []) as MessageRow[])
+  const messages: MessageItem[] = msgRows
     .filter(m => m.content !== null)
     .map(m => ({
       id: m.id,
@@ -84,7 +87,7 @@ export default async function InvestigationPage({ params }: RouteParams) {
 
   return (
     <InvestigationDetail
-      investigation={investigation}
+      investigation={invData}
       workers={workers}
       messages={messages}
     />

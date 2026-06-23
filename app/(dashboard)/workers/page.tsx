@@ -1,15 +1,8 @@
-import { createClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth/session'
+import { db, schema } from '@/lib/db'
+import { eq } from 'drizzle-orm'
 import { WorkersClient } from './WorkersClient'
-
-interface WorkerRow {
-  id: string
-  anonymous_alias: string
-  role: string
-  role_description: string | null
-  whatsapp_number: string
-  is_active: boolean
-  created_at: string
-}
+import { redirect } from 'next/navigation'
 
 export interface MaskedWorker {
   id: string
@@ -26,23 +19,16 @@ function maskNumber(phone: string): string {
 }
 
 export default async function WorkersPage() {
-  const supabase = await createClient()
+  const session = await getSession()
+  if (!session) redirect('/login')
 
-  const { data, error } = await supabase
-    .from('workers')
-    .select('id, anonymous_alias, role, role_description, whatsapp_number, is_active, created_at')
-    .order('created_at', { ascending: true })
+  const workers = await db
+    .select()
+    .from(schema.workers)
+    .where(eq(schema.workers.company_id, session.companyId))
+    .orderBy(schema.workers.created_at)
 
-  if (error) {
-    return (
-      <div>
-        <h1 className="text-xl font-semibold mb-4">Workers</h1>
-        <p className="text-red-600 text-sm">Erro ao carregar workers.</p>
-      </div>
-    )
-  }
-
-  const workers: MaskedWorker[] = (data as WorkerRow[]).map(w => ({
+  const masked: MaskedWorker[] = workers.map(w => ({
     id: w.id,
     anonymous_alias: w.anonymous_alias,
     role: w.role,
@@ -52,5 +38,5 @@ export default async function WorkersPage() {
     created_at: w.created_at,
   }))
 
-  return <WorkersClient initialWorkers={workers} />
+  return <WorkersClient initialWorkers={masked} />
 }

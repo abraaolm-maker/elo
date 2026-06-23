@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 import { toFile } from 'openai/uploads'
-import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
-import type { Database } from '../supabase/types'
+import path from 'path'
+import fs from 'fs'
 
 interface TranscriptionSegment {
   no_speech_prob?: number
@@ -12,8 +12,20 @@ interface VerboseTranscription {
   segments?: TranscriptionSegment[]
 }
 
-export async function downloadAudio(url: string): Promise<Buffer> {
-  const response = await fetch(url)
+const STORAGE_DIR = path.join(process.cwd(), 'storage', 'audio')
+
+function ensureDir(dir: string) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+}
+
+export async function downloadAudio(url: string, authToken?: string): Promise<Buffer> {
+  const headers: Record<string, string> = {}
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`
+  }
+  const response = await fetch(url, { headers })
   if (!response.ok) {
     throw new Error(`Failed to download audio: HTTP ${response.status}`)
   }
@@ -21,26 +33,18 @@ export async function downloadAudio(url: string): Promise<Buffer> {
   return Buffer.from(arrayBuffer)
 }
 
-export async function uploadAudioToStorage(buffer: Buffer, fileName: string): Promise<string> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Supabase env vars not configured')
-  }
-
-  const adminClient = createSupabaseAdminClient<Database>(supabaseUrl, serviceRoleKey)
-
-  const { error } = await adminClient.storage
-    .from('audio-messages')
-    .upload(fileName, buffer, { contentType: 'audio/ogg', upsert: false })
-
-  if (error) {
-    throw new Error(`Storage upload failed: ${error.message}`)
-  }
-
-  const { data } = adminClient.storage.from('audio-messages').getPublicUrl(fileName)
-  return data.publicUrl
+/**
+ * Salva o buffer de áudio no filesystem local.
+ * Retorna o path relativo salvo no banco (ex: "invId/workerId/msgId.ogg").
+ */
+export async function uploadAudioToStorage(
+  buffer: Buffer,
+  fileName: string
+): Promise<string> {
+  const fullPath = path.join(STORAGE_DIR, fileName)
+  ensureDir(path.dirname(fullPath))
+  fs.writeFileSync(fullPath, buffer)
+  return fileName
 }
 
 export function isTranscriptionReliable(transcription: VerboseTranscription): boolean {

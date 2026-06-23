@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -82,32 +81,17 @@ export function InvestigationDetail(props: InvestigationDetailProps) {
     }
   }, [props.investigation.id])
 
-  // Supabase Realtime — assina mensagens e atualizações da investigação
+  // Polling de 5s para manter a UI atualizada (substitui Supabase Realtime)
   useEffect(() => {
-    const supabase = createClient()
-    const invId = props.investigation.id
+    const invStatus = investigation.status
+    if (invStatus === 'completed' || invStatus === 'cancelled') return
 
-    const channel = supabase
-      .channel(`investigation-${invId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `investigation_id=eq.${invId}` },
-        () => { void refreshData() }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'investigation_workers' },
-        () => { void refreshData() }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'investigations', filter: `id=eq.${invId}` },
-        () => { void refreshData() }
-      )
-      .subscribe()
+    const interval = setInterval(() => {
+      void refreshData()
+    }, 5000)
 
-    return () => { void supabase.removeChannel(channel) }
-  }, [props.investigation.id, refreshData])
+    return () => clearInterval(interval)
+  }, [investigation.status, refreshData])
 
   async function handleStart() {
     setStartError(null)

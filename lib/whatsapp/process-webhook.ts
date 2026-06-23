@@ -1,53 +1,14 @@
-import { createClient } from '@supabase/supabase-js'
-import { parseWhatsAppPayload } from './parser'
+import { db, schema } from '@/lib/db'
+import { eq, and, ne, isNotNull } from 'drizzle-orm'
+import { parseWhatsAppPayload, resolveMetaMediaUrl } from './parser'
 import { sendWhatsAppMessage } from './sender'
 import { downloadAudio, uploadAudioToStorage, transcribeAudio } from '@/lib/audio/transcriber'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import { generateReport } from '@/lib/ai/report-generator'
 import type { MessageHistoryEntry, ReportMessageEntry, WorkerAlias } from '@/lib/ai/types'
+import crypto from 'crypto'
 
-// ─── Tipos locais ─────────────────────────────────────────────────────────────
-
-interface WorkerRow {
-  id: string
-  company_id: string
-  role: string
-  role_description: string | null
-  whatsapp_number: string
-  anonymous_alias: string
-}
-
-interface InvestigationWorkerRow {
-  id: string
-  investigation_id: string
-  saturation_score: number
-  status: string
-}
-
-interface InvestigationRow {
-  id: string
-  problem_description: string
-  status: string
-  company_id: string
-  title: string
-}
-
-interface MessageRow {
-  id: string
-  direction: string
-  content: string | null
-  key_points_extracted: unknown
-  worker_id: string
-}
-
-export function getAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('Supabase service role env vars missing')
-  return createClient(url, key)
-}
-
-// ─── Lógica central — aceita payload bruto do Evolution API ──────────────────
+// ─── Lógica central — aceita payload bruto do Meta WhatsApp ──────────────────
 
 export async function processWebhookPayload(body: unknown): Promise<void> {
   const parsed = parseWhatsAppPayload(body)
@@ -71,90 +32,104 @@ export async function processInboundMessage({
   type: 'text' | 'audio'
   content: string
 }): Promise<void> {
-  const db = getAdminClient()
-
-  // Deduplicação
-  const { data: existing } = await db
-    .from('messages')
-    .select('id')
-    .eq('raw_whatsapp_id', messageId)
-    .maybeSingle()
+  // Deduplicação — raw_whatsapp_id tem constraint UNIQUE
+  const existing = await db
+    .select({ id: schema.messages.id })
+    .from(schema.messages)
+    .where(eq(schema.messages.raw_whatsapp_id, messageId))
+    .get()
   if (existing) return
 
   // Buscar worker pelo phoneNumber
-  const { data: workerData } = await db
-    .from('workers')
-    .select('id, company_id, role, role_description, whatsapp_number, anonymous_alias')
-    .eq('whatsapp_number', phoneNumber)
-    .eq('is_active', true)
-    .maybeSingle()
-  if (!workerData) return
-  const worker = workerData as WorkerRow
+  const worker = await db
+    .select()
+    .from(schema.workers)
+    .where(
+      and(
+        eq(schema.workers.whatsapp_number, phoneNumber),
+        eq(schema.workers.is_active, true)
+      )
+    )
+    .get()
+  if (!worker) return
 
-  // Buscar investigation_worker ativo
-  const { data: iwData } = await db
-    .from('investigation_workers')
-    .select('id, investigation_id, saturation_score, status')
-    .eq('worker_id', worker.id)
-    .eq('status', 'active')
-    .maybeSingle()
-  if (!iwData) return
-  const iw = iwData as InvestigationWorkerRow
+  // Buscar investigation_worker ativo para este worker
+  const iw = await db
+    .select()
+    .from(schema.investigation_workers)
+    .where(
+      and(
+        eq(schema.investigation_workers.worker_id, worker.id),
+        eq(schema.investigation_workers.status, 'active')
+      )
+    )
+    .get()
+  if (!iw) return
 
   // Confirmar que a investigação está ativa
-  const { data: invData } = await db
-    .from('investigations')
-    .select('id, problem_description, status, company_id, title')
-    .eq('id', iw.investigation_id)
-    .eq('status', 'active')
-    .maybeSingle()
-  if (!invData) return
-  const investigation = invData as InvestigationRow
+  const investigation = await db
+    .select()
+    .from(schema.investigations)
+    .where(
+      and(
+        eq(schema.investigations.id, iw.investigation_id),
+        eq(schema.investigations.status, 'active')
+      )
+    )
+    .get()
+  if (!investigation) return
 
-  // Processar mensagem
+  // ── Processar mensagem ──────────────────────────────────────────────────────
+
   let messageContent: string | null = null
   let audioUrl: string | null = null
   let transcriptionStatus = 'not_applicable'
   let savedMessageId: string | null = null
 
   if (type === 'audio') {
-    const { data: lastFailedMsg } = await db
-      .from('messages')
-      .select('retry_count')
-      .eq('worker_id', worker.id)
-      .eq('investigation_id', iw.investigation_id)
-      .eq('transcription_status', 'failed')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    // Verificar retry count de falhas anteriores deste worker nesta investigação
+    const lastFailed = await db
+      .select({ retry_count: schema.messages.retry_count })
+      .from(schema.messages)
+      .where(
+        and(
+          eq(schema.messages.worker_id, worker.id),
+          eq(schema.messages.investigation_id, iw.investigation_id),
+          eq(schema.messages.transcription_status, 'failed')
+        )
+      )
+      .orderBy(schema.messages.created_at)
+      .get()
 
-    const currentRetryCount = ((lastFailedMsg as { retry_count: number } | null)?.retry_count ?? 0)
+    const currentRetryCount = lastFailed?.retry_count ?? 0
 
     try {
-      const audioBuffer = await downloadAudio(content)
+      // Para Meta API: content é o Media ID — resolver para URL de download
+      const audioDownloadUrl = await resolveMetaMediaUrl(content)
+      const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
+
+      const audioBuffer = await downloadAudio(audioDownloadUrl, accessToken)
       const fileName = `${iw.investigation_id}/${worker.id}/${messageId}.ogg`
       audioUrl = await uploadAudioToStorage(audioBuffer, fileName)
+
       const { text, reliable } = await transcribeAudio(audioBuffer)
 
       if (!reliable) {
         if (currentRetryCount < 2) {
-          const { data: savedMsg } = await db
-            .from('messages')
-            .insert({
-              investigation_id: iw.investigation_id,
-              worker_id: worker.id,
-              direction: 'inbound',
-              content_type: 'audio',
-              content: null,
-              audio_url: audioUrl,
-              raw_whatsapp_id: messageId,
-              transcription_status: 'failed',
-              retry_count: currentRetryCount + 1,
-            })
-            .select('id')
-            .single()
-
-          if (savedMsg) savedMessageId = (savedMsg as { id: string }).id
+          const newMsgId = crypto.randomUUID()
+          await db.insert(schema.messages).values({
+            id: newMsgId,
+            investigation_id: iw.investigation_id,
+            worker_id: worker.id,
+            direction: 'inbound',
+            content_type: 'audio',
+            content: null,
+            audio_url: audioUrl,
+            raw_whatsapp_id: messageId,
+            transcription_status: 'failed',
+            retry_count: currentRetryCount + 1,
+          })
+          savedMessageId = newMsgId
 
           await sendWhatsAppMessage({
             number: worker.whatsapp_number,
@@ -180,60 +155,67 @@ export async function processInboundMessage({
 
   // Salvar mensagem inbound
   if (!savedMessageId) {
-    const { data: savedMsg, error: insertErr } = await db
-      .from('messages')
-      .insert({
-        investigation_id: iw.investigation_id,
-        worker_id: worker.id,
-        direction: 'inbound',
-        content_type: type,
-        content: messageContent,
-        audio_url: audioUrl,
-        raw_whatsapp_id: messageId,
-        transcription_status: transcriptionStatus,
-        retry_count: 0,
-      })
-      .select('id')
-      .single()
-
-    if (insertErr || !savedMsg) {
-      console.error('[process-webhook] failed to save inbound message', insertErr)
-      return
-    }
-    savedMessageId = (savedMsg as { id: string }).id
+    const newMsgId = crypto.randomUUID()
+    await db.insert(schema.messages).values({
+      id: newMsgId,
+      investigation_id: iw.investigation_id,
+      worker_id: worker.id,
+      direction: 'inbound',
+      content_type: type,
+      content: messageContent,
+      audio_url: audioUrl,
+      raw_whatsapp_id: messageId,
+      transcription_status: transcriptionStatus,
+      retry_count: 0,
+    })
+    savedMessageId = newMsgId
   }
 
   if (!messageContent) return
 
-  // Construir crossValidationContext
-  const { data: otherMessages } = await db
-    .from('messages')
-    .select('key_points_extracted')
-    .eq('investigation_id', iw.investigation_id)
-    .eq('direction', 'inbound')
-    .neq('worker_id', worker.id)
-    .not('key_points_extracted', 'is', null)
+  // ── Construir crossValidationContext ────────────────────────────────────────
+  const otherMessages = await db
+    .select({ key_points_extracted: schema.messages.key_points_extracted })
+    .from(schema.messages)
+    .where(
+      and(
+        eq(schema.messages.investigation_id, iw.investigation_id),
+        eq(schema.messages.direction, 'inbound'),
+        ne(schema.messages.worker_id, worker.id),
+        isNotNull(schema.messages.key_points_extracted)
+      )
+    )
 
-  const crossValidationContext = ((otherMessages ?? []) as { key_points_extracted: unknown }[])
-    .flatMap(m => (m.key_points_extracted as string[] | null) ?? [])
+  const crossValidationContext = otherMessages
+    .flatMap(m => {
+      try {
+        return (JSON.parse(m.key_points_extracted ?? '[]') as string[])
+      } catch {
+        return []
+      }
+    })
     .join('; ')
 
-  // Buscar messageHistory deste worker
-  const { data: rawHistory } = await db
-    .from('messages')
-    .select('direction, content')
-    .eq('investigation_id', iw.investigation_id)
-    .eq('worker_id', worker.id)
-    .order('created_at', { ascending: true })
+  // ── Buscar histórico de mensagens deste worker ───────────────────────────────
+  const rawHistory = await db
+    .select({ direction: schema.messages.direction, content: schema.messages.content })
+    .from(schema.messages)
+    .where(
+      and(
+        eq(schema.messages.investigation_id, iw.investigation_id),
+        eq(schema.messages.worker_id, worker.id)
+      )
+    )
+    .orderBy(schema.messages.created_at)
 
-  const messageHistory: MessageHistoryEntry[] = ((rawHistory ?? []) as { direction: string; content: string | null }[])
+  const messageHistory: MessageHistoryEntry[] = rawHistory
     .filter(m => m.content !== null)
     .map(m => ({
       direction: m.direction as 'outbound' | 'inbound',
       content: m.content as string,
     }))
 
-  // Chamar o engine
+  // ── Chamar o engine de investigação ─────────────────────────────────────────
   let engineOutput
   try {
     engineOutput = await runInvestigationEngine({
@@ -249,17 +231,21 @@ export async function processInboundMessage({
   }
 
   if (engineOutput.action === 'ask_question') {
+    // Atualizar key_points_extracted na mensagem inbound salva
     await db
-      .from('messages')
-      .update({ key_points_extracted: engineOutput.key_points_extracted })
-      .eq('id', savedMessageId)
+      .update(schema.messages)
+      .set({ key_points_extracted: JSON.stringify(engineOutput.key_points_extracted) })
+      .where(eq(schema.messages.id, savedMessageId))
 
+    // Atualizar saturation_score
     await db
-      .from('investigation_workers')
-      .update({ saturation_score: engineOutput.saturation_score })
-      .eq('id', iw.id)
+      .update(schema.investigation_workers)
+      .set({ saturation_score: engineOutput.saturation_score })
+      .where(eq(schema.investigation_workers.id, iw.id))
 
-    await db.from('messages').insert({
+    // Salvar pergunta de saída no banco
+    await db.insert(schema.messages).values({
+      id: crypto.randomUUID(),
       investigation_id: iw.investigation_id,
       worker_id: worker.id,
       direction: 'outbound',
@@ -269,8 +255,7 @@ export async function processInboundMessage({
       retry_count: 0,
     })
 
-    // Enviar via WhatsApp — falha aqui NÃO aborta o fluxo.
-    // A pergunta já está salva no banco; o gestor pode ver no dashboard.
+    // Enviar via WhatsApp — falha aqui NÃO aborta o fluxo
     sendWhatsAppMessage({
       number: worker.whatsapp_number,
       text: engineOutput.next_question,
@@ -283,117 +268,126 @@ export async function processInboundMessage({
 
   if (engineOutput.action === 'mark_saturated') {
     await db
-      .from('messages')
-      .update({ key_points_extracted: engineOutput.key_points_extracted })
-      .eq('id', savedMessageId)
+      .update(schema.messages)
+      .set({ key_points_extracted: JSON.stringify(engineOutput.key_points_extracted) })
+      .where(eq(schema.messages.id, savedMessageId))
 
     await db
-      .from('investigation_workers')
-      .update({ status: 'saturated', saturation_score: engineOutput.saturation_score })
-      .eq('id', iw.id)
+      .update(schema.investigation_workers)
+      .set({ status: 'saturated', saturation_score: engineOutput.saturation_score })
+      .where(eq(schema.investigation_workers.id, iw.id))
 
-    const { data: allIws } = await db
-      .from('investigation_workers')
-      .select('status')
-      .eq('investigation_id', iw.investigation_id)
+    // Verificar se TODOS os workers desta investigação estão saturados ou unresponsive
+    const allIws = await db
+      .select({ status: schema.investigation_workers.status })
+      .from(schema.investigation_workers)
+      .where(eq(schema.investigation_workers.investigation_id, iw.investigation_id))
 
-    const allDone = ((allIws ?? []) as { status: string }[]).every(
+    const allDone = allIws.every(
       w => w.status === 'saturated' || w.status === 'unresponsive'
     )
 
     if (!allDone) return
 
+    // Atualizar investigação para 'saturated' antes de gerar relatório
     await db
-      .from('investigations')
-      .update({ status: 'saturated' })
-      .eq('id', iw.investigation_id)
+      .update(schema.investigations)
+      .set({ status: 'saturated' })
+      .where(eq(schema.investigations.id, iw.investigation_id))
 
-    // Buscar tudo para o relatório
-    const { data: allMsgs } = await db
-      .from('messages')
-      .select('direction, content, key_points_extracted, worker_id')
-      .eq('investigation_id', iw.investigation_id)
-      .order('created_at', { ascending: true })
+    // ── Gerar relatório ──────────────────────────────────────────────────────
 
-    const { data: allIwsWithWorkers } = await db
-      .from('investigation_workers')
-      .select('worker_id, workers(anonymous_alias, role)')
-      .eq('investigation_id', iw.investigation_id)
+    // Buscar todas as mensagens da investigação
+    const allMsgs = await db
+      .select()
+      .from(schema.messages)
+      .where(eq(schema.messages.investigation_id, iw.investigation_id))
+      .orderBy(schema.messages.created_at)
+
+    // Buscar workers da investigação com seus aliases
+    const allIwsWithWorkers = await db
+      .select({
+        worker_id: schema.investigation_workers.worker_id,
+        alias: schema.workers.anonymous_alias,
+        role: schema.workers.role,
+      })
+      .from(schema.investigation_workers)
+      .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
+      .where(eq(schema.investigation_workers.investigation_id, iw.investigation_id))
 
     const workerMap = new Map<string, { alias: string; role: string }>()
-    for (const row of (allIwsWithWorkers ?? []) as unknown as { worker_id: string; workers: { anonymous_alias: string; role: string } | { anonymous_alias: string; role: string }[] | null }[]) {
-      const w = Array.isArray(row.workers) ? row.workers[0] : row.workers
-      if (w) workerMap.set(row.worker_id, { alias: w.anonymous_alias, role: w.role })
+    for (const row of allIwsWithWorkers) {
+      workerMap.set(row.worker_id, { alias: row.alias, role: row.role })
     }
 
-    const reportMessages: ReportMessageEntry[] = ((allMsgs ?? []) as MessageRow[])
+    const reportMessages: ReportMessageEntry[] = allMsgs
       .filter(m => m.content !== null)
       .map(m => {
         const wInfo = workerMap.get(m.worker_id) ?? { alias: 'Desconhecido', role: '' }
+        let keyPoints: string[] | undefined
+        try {
+          keyPoints = m.key_points_extracted
+            ? (JSON.parse(m.key_points_extracted) as string[])
+            : undefined
+        } catch {
+          keyPoints = undefined
+        }
         return {
           alias: wInfo.alias,
           role: wInfo.role,
           direction: m.direction as 'outbound' | 'inbound',
           content: m.content as string,
-          key_points_extracted: (m.key_points_extracted as string[] | null) ?? undefined,
+          key_points_extracted: keyPoints,
         }
       })
 
     const workerAliases: WorkerAlias[] = Array.from(workerMap.values())
 
-    const { data: invFull } = await db
-      .from('investigations')
-      .select('title, problem_description')
-      .eq('id', iw.investigation_id)
-      .single()
-
-    if (!invFull) {
-      console.error('[process-webhook] could not fetch investigation for report')
-      return
-    }
-
-    const invFullTyped = invFull as { title: string; problem_description: string }
-
-    // Gerar e salvar relatório.
-    // Se falhar, a investigação ainda avança para 'completed' — o relatório pode
-    // ser regenerado manualmente via POST /api/reports/[investigationId].
     try {
       const report = await generateReport({
         investigation: {
-          title: invFullTyped.title,
-          problem_description: invFullTyped.problem_description,
+          title: investigation.title,
+          problem_description: investigation.problem_description,
         },
         allMessages: reportMessages,
         workerAliases,
       })
 
-      const { error: reportErr } = await db.from('reports').upsert(
-        {
-          investigation_id: iw.investigation_id,
-          root_cause: report.root_cause,
-          confidence_score: report.confidence_score,
-          confidence_justification: report.confidence_justification,
-          ishikawa_breakdown: report.ishikawa_breakdown,
-          sources_summary: report.sources_summary,
-          recommendations: report.recommendations,
-          generated_at: new Date().toISOString(),
-        },
-        { onConflict: 'investigation_id' }
-      )
+      // Upsert — pode já existir se regenerado manualmente
+      const existingReport = await db
+        .select({ id: schema.reports.id })
+        .from(schema.reports)
+        .where(eq(schema.reports.investigation_id, iw.investigation_id))
+        .get()
 
-      if (reportErr) {
-        console.error('[process-webhook] failed to save report', reportErr)
-        // Não retornar — ainda marcar como completed abaixo
+      const reportValues = {
+        investigation_id: iw.investigation_id,
+        root_cause: report.root_cause,
+        confidence_score: report.confidence_score,
+        confidence_justification: report.confidence_justification ?? null,
+        ishikawa_breakdown: JSON.stringify(report.ishikawa_breakdown),
+        sources_summary: JSON.stringify(report.sources_summary),
+        recommendations: JSON.stringify(report.recommendations),
+        generated_at: new Date().toISOString(),
+      }
+
+      if (existingReport) {
+        await db
+          .update(schema.reports)
+          .set(reportValues)
+          .where(eq(schema.reports.investigation_id, iw.investigation_id))
+      } else {
+        await db.insert(schema.reports).values({ id: crypto.randomUUID(), ...reportValues })
       }
     } catch (error) {
-      console.error('[process-webhook] report generation error (non-fatal — regenerate manually)', error)
-      // Não retornar — investigação avança para completed sem relatório
+      console.error('[process-webhook] report generation error (non-fatal — regenerate via API)', error)
     }
 
-    // Marcar completed independente do sucesso da geração do relatório
+    // Marcar como completed — independente do sucesso da geração do relatório
     await db
-      .from('investigations')
-      .update({ status: 'completed', completed_at: new Date().toISOString() })
-      .eq('id', iw.investigation_id)
+      .update(schema.investigations)
+      .set({ status: 'completed', completed_at: new Date().toISOString() })
+      .where(eq(schema.investigations.id, iw.investigation_id))
   }
 }
+

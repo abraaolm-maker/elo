@@ -42,3 +42,9 @@ next-env.d.ts
 
 dev-server.log
 dev-server.log.err
+
+# SQLite database (local data — não commitar)
+/data/
+
+# Áudios do WhatsApp (local storage — não commitar)
+/storage/

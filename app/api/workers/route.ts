@@ -1,18 +1,7 @@
-import { createClient } from '@/lib/supabase/server'
-
-interface WorkerRow {
-  id: string
-  anonymous_alias: string
-  role: string
-  role_description: string | null
-  whatsapp_number: string
-  is_active: boolean
-  created_at: string
-}
-
-interface ManagerRow {
-  company_id: string
-}
+import { requireAuth } from '@/lib/auth/middleware'
+import { db, schema } from '@/lib/db'
+import { eq, and, count } from 'drizzle-orm'
+import crypto from 'crypto'
 
 const ALIAS_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
@@ -33,22 +22,24 @@ function validateWhatsAppNumber(phone: string): string | null {
 
 export async function GET(): Promise<Response> {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+    const session = await requireAuth()
 
-    const { data, error } = await supabase
-      .from('workers')
-      .select('id, anonymous_alias, role, role_description, whatsapp_number, is_active, created_at')
-      .order('created_at', { ascending: true })
-
-    if (error) {
-      console.error('[workers GET]', error)
-      return Response.json({ error: 'Erro interno' }, { status: 500 })
-    }
+    const workers = await db
+      .select({
+        id: schema.workers.id,
+        anonymous_alias: schema.workers.anonymous_alias,
+        role: schema.workers.role,
+        role_description: schema.workers.role_description,
+        whatsapp_number: schema.workers.whatsapp_number,
+        is_active: schema.workers.is_active,
+        created_at: schema.workers.created_at,
+      })
+      .from(schema.workers)
+      .where(eq(schema.workers.company_id, session.companyId))
+      .orderBy(schema.workers.created_at)
 
     // Nunca expor whatsapp_number completo
-    const workers = ((data ?? []) as WorkerRow[]).map(w => ({
+    const masked = workers.map(w => ({
       id: w.id,
       anonymous_alias: w.anonymous_alias,
       role: w.role,
@@ -58,7 +49,7 @@ export async function GET(): Promise<Response> {
       created_at: w.created_at,
     }))
 
-    return Response.json({ data: workers }, { status: 200 })
+    return Response.json({ data: masked }, { status: 200 })
   } catch (error) {
     console.error('[workers GET]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
@@ -67,69 +58,68 @@ export async function GET(): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+    const session = await requireAuth()
 
     const body = await request.json() as Record<string, unknown>
+    const name = typeof body.name === 'string' ? body.name.trim() : ''
     const role = typeof body.role === 'string' ? body.role.trim() : ''
     const role_description = typeof body.role_description === 'string' ? body.role_description.trim() : ''
     const whatsapp_number = typeof body.whatsapp_number === 'string' ? body.whatsapp_number.trim() : ''
 
+    if (!name) return Response.json({ error: 'O nome é obrigatório.' }, { status: 400 })
     if (!role) return Response.json({ error: 'O cargo é obrigatório.' }, { status: 400 })
     if (!whatsapp_number) return Response.json({ error: 'O número WhatsApp é obrigatório.' }, { status: 400 })
 
     const numberError = validateWhatsAppNumber(whatsapp_number)
     if (numberError) return Response.json({ error: numberError }, { status: 400 })
 
-    // Buscar company_id do manager autenticado
-    const { data: managerData } = await supabase
-      .from('managers')
-      .select('company_id')
-      .eq('id', user.id)
-      .single()
-
-    const manager = managerData as ManagerRow | null
-    if (!manager) return Response.json({ error: 'Manager não encontrado.' }, { status: 404 })
-
     // Verificar duplicidade de número na company
-    const { data: existing } = await supabase
-      .from('workers')
-      .select('id')
-      .eq('company_id', manager.company_id)
-      .eq('whatsapp_number', whatsapp_number)
-      .maybeSingle()
+    const existing = await db
+      .select({ id: schema.workers.id })
+      .from(schema.workers)
+      .where(
+        and(
+          eq(schema.workers.company_id, session.companyId),
+          eq(schema.workers.whatsapp_number, whatsapp_number)
+        )
+      )
+      .get()
 
     if (existing) {
       return Response.json({ error: 'Este número já está cadastrado na empresa.' }, { status: 409 })
     }
 
-    // Gerar alias com base no total de workers da company (incluindo inativos)
-    const { count } = await supabase
-      .from('workers')
-      .select('id', { count: 'exact', head: true })
-      .eq('company_id', manager.company_id)
+    // Gerar alias com base no total de workers da company
+    const [{ value: workerCount }] = await db
+      .select({ value: count() })
+      .from(schema.workers)
+      .where(eq(schema.workers.company_id, session.companyId))
 
-    const alias = generateAlias(count ?? 0)
+    const alias = generateAlias(workerCount)
 
-    const { data: newWorkerData, error: insertError } = await supabase
-      .from('workers')
-      .insert({
-        company_id: manager.company_id,
-        role,
-        role_description: role_description || null,
-        whatsapp_number,
-        anonymous_alias: alias,
+    const newId = crypto.randomUUID()
+    await db.insert(schema.workers).values({
+      id: newId,
+      company_id: session.companyId,
+      name,
+      role,
+      role_description: role_description || null,
+      whatsapp_number,
+      anonymous_alias: alias,
+    })
+
+    const newWorker = await db
+      .select({
+        id: schema.workers.id,
+        anonymous_alias: schema.workers.anonymous_alias,
+        role: schema.workers.role,
+        role_description: schema.workers.role_description,
+        is_active: schema.workers.is_active,
+        created_at: schema.workers.created_at,
       })
-      .select('id, anonymous_alias, role, role_description, is_active, created_at')
-      .single()
-
-    const newWorker = newWorkerData as WorkerRow | null
-
-    if (insertError) {
-      console.error('[workers POST]', insertError)
-      return Response.json({ error: 'Erro ao criar worker.' }, { status: 500 })
-    }
+      .from(schema.workers)
+      .where(eq(schema.workers.id, newId))
+      .get()
 
     return Response.json({ data: newWorker }, { status: 201 })
   } catch (error) {

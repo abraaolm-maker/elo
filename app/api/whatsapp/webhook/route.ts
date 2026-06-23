@@ -1,18 +1,33 @@
+import { NextRequest } from 'next/server'
 import { processWebhookPayload } from '@/lib/whatsapp/process-webhook'
 
-export async function POST(request: Request): Promise<Response> {
-  // Validar secret
-  const secret = request.headers.get('x-webhook-secret')
-  if (!secret || secret !== process.env.WHATSAPP_WEBHOOK_SECRET) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+// ─── GET — verificação do webhook pelo Meta ───────────────────────────────────
+// https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/manage-and-debug
+export function GET(request: NextRequest): Response {
+  const { searchParams } = new URL(request.url)
+  const mode = searchParams.get('hub.mode')
+  const token = searchParams.get('hub.verify_token')
+  const challenge = searchParams.get('hub.challenge')
+
+  if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    console.log('[webhook] Meta verification successful')
+    return new Response(challenge ?? '', { status: 200 })
   }
 
-  // Retornar 200 imediatamente — WhatsApp reenvia se não receber em 5s
+  return new Response('Forbidden', { status: 403 })
+}
+
+// ─── POST — receber mensagens do Meta ─────────────────────────────────────────
+export async function POST(request: NextRequest): Promise<Response> {
+  // Meta não usa header de secret — valida via verify_token no GET de setup.
+  // Para segurança adicional em produção, considere validar a assinatura X-Hub-Signature-256.
+  // Por ora: aceitar todos os POSTs e retornar 200 imediatamente.
+
   let body: unknown
   try {
     body = await request.json()
   } catch {
-    return Response.json({ ok: true }, { status: 200 })
+    return new Response('OK', { status: 200 })
   }
 
   // Processar de forma assíncrona (fire and forget)
@@ -20,5 +35,5 @@ export async function POST(request: Request): Promise<Response> {
     console.error('[webhook] unhandled async error', error)
   })
 
-  return Response.json({ ok: true }, { status: 200 })
+  return new Response('OK', { status: 200 })
 }

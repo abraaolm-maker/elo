@@ -8,8 +8,8 @@ export interface ReportData {
   root_cause: string
   confidence_score: number
   confidence_justification: string | null
-  ishikawa_breakdown: IshikawaBreakdownOutput
-  sources_summary: SourceSummaryOutput[]
+  ishikawa_breakdown: IshikawaBreakdownOutput | null
+  sources_summary: SourceSummaryOutput[] | null
   recommendations: string[]
   generated_at: string
 }
@@ -82,7 +82,7 @@ export function ReportView({ investigationTitle, report }: ReportViewProps) {
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {ISHIKAWA_KEYS.map(key => {
-            const value = report.ishikawa_breakdown[key]
+            const value = report.ishikawa_breakdown?.[key] ?? null
             const isEmpty = value === null || value === undefined
             return (
               <div
@@ -104,13 +104,13 @@ export function ReportView({ investigationTitle, report }: ReportViewProps) {
       </section>
 
       {/* 4. FONTES */}
-      {report.sources_summary.length > 0 && (
+      {(report.sources_summary ?? []).length > 0 && (
         <section>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-3">
             Fontes consultadas
           </h2>
           <div className="space-y-4">
-            {report.sources_summary.map((source, i) => (
+            {(report.sources_summary ?? []).map((source, i) => (
               <div key={i} className="rounded-lg border border-gray-200 bg-white p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-medium text-gray-900">{source.alias}</span>

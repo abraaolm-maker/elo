@@ -1,47 +1,46 @@
-import { createClient } from '@/lib/supabase/server'
-
-interface InvestigationRow {
-  id: string
-  title: string
-  status: string
-  created_at: string
-  investigation_workers: { id: string }[]
-}
-
-interface ManagerRow {
-  company_id: string
-}
-
-interface WorkerValidationRow {
-  id: string
-  company_id: string
-}
+import { requireAuth } from '@/lib/auth/middleware'
+import { db, schema } from '@/lib/db'
+import { eq, and, inArray, count } from 'drizzle-orm'
+import crypto from 'crypto'
 
 export async function GET(): Promise<Response> {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+    const session = await requireAuth()
 
-    const { data, error } = await supabase
-      .from('investigations')
-      .select('id, title, status, created_at, investigation_workers(id)')
-      .order('created_at', { ascending: false })
+    const investigations = await db
+      .select({
+        id: schema.investigations.id,
+        title: schema.investigations.title,
+        status: schema.investigations.status,
+        created_at: schema.investigations.created_at,
+      })
+      .from(schema.investigations)
+      .where(eq(schema.investigations.company_id, session.companyId))
+      .orderBy(schema.investigations.created_at)
 
-    if (error) {
-      console.error('[investigations GET]', error)
-      return Response.json({ error: 'Erro interno' }, { status: 500 })
-    }
+    // Buscar contagem de workers por investigação
+    const workerCounts = await db
+      .select({
+        investigation_id: schema.investigation_workers.investigation_id,
+        cnt: count(),
+      })
+      .from(schema.investigation_workers)
+      .where(
+        inArray(
+          schema.investigation_workers.investigation_id,
+          investigations.map(i => i.id)
+        )
+      )
+      .groupBy(schema.investigation_workers.investigation_id)
 
-    const investigations = ((data ?? []) as unknown as InvestigationRow[]).map(inv => ({
-      id: inv.id,
-      title: inv.title,
-      status: inv.status,
-      created_at: inv.created_at,
-      worker_count: inv.investigation_workers.length,
+    const countMap = new Map(workerCounts.map(r => [r.investigation_id, r.cnt]))
+
+    const result = investigations.map(inv => ({
+      ...inv,
+      worker_count: countMap.get(inv.id) ?? 0,
     }))
 
-    return Response.json({ data: investigations }, { status: 200 })
+    return Response.json({ data: result }, { status: 200 })
   } catch (error) {
     console.error('[investigations GET]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
@@ -50,9 +49,7 @@ export async function GET(): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return Response.json({ error: 'Não autenticado' }, { status: 401 })
+    const session = await requireAuth()
 
     const body = await request.json() as Record<string, unknown>
     const title = typeof body.title === 'string' ? body.title.trim() : ''
@@ -67,62 +64,49 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ error: 'Selecione pelo menos um worker.' }, { status: 400 })
     }
 
-    // Buscar company_id do manager
-    const { data: managerData } = await supabase
-      .from('managers')
-      .select('company_id')
-      .eq('id', user.id)
-      .single()
-
-    const manager = managerData as ManagerRow | null
-    if (!manager) return Response.json({ error: 'Manager não encontrado.' }, { status: 404 })
-
     // Validar que todos os worker_ids pertencem à company
-    const { data: workersData } = await supabase
-      .from('workers')
-      .select('id, company_id')
-      .in('id', worker_ids)
-      .eq('company_id', manager.company_id)
-      .eq('is_active', true)
+    const validWorkers = await db
+      .select({ id: schema.workers.id })
+      .from(schema.workers)
+      .where(
+        and(
+          eq(schema.workers.company_id, session.companyId),
+          eq(schema.workers.is_active, true),
+          inArray(schema.workers.id, worker_ids)
+        )
+      )
 
-    const validWorkers = (workersData ?? []) as WorkerValidationRow[]
     if (validWorkers.length !== worker_ids.length) {
       return Response.json({ error: 'Um ou mais workers são inválidos.' }, { status: 400 })
     }
 
     // Criar investigação
-    const { data: invData, error: invError } = await supabase
-      .from('investigations')
-      .insert({
-        company_id: manager.company_id,
-        manager_id: user.id,
-        title,
-        problem_description,
-        status: 'pending',
-      })
-      .select('id, title, status, created_at')
-      .single()
-
-    if (invError || !invData) {
-      console.error('[investigations POST]', invError)
-      return Response.json({ error: 'Erro ao criar investigação.' }, { status: 500 })
-    }
-
-    const investigation = invData as { id: string; title: string; status: string; created_at: string }
+    const invId = crypto.randomUUID()
+    await db.insert(schema.investigations).values({
+      id: invId,
+      company_id: session.companyId,
+      manager_id: session.managerId,
+      title,
+      problem_description,
+      status: 'pending',
+    })
 
     // Criar registros em investigation_workers
-    const iwInserts = worker_ids.map(wid => ({
-      investigation_id: investigation.id,
-      worker_id: wid,
-      status: 'pending',
-      saturation_score: 0,
-    }))
+    await db.insert(schema.investigation_workers).values(
+      worker_ids.map(wid => ({
+        id: crypto.randomUUID(),
+        investigation_id: invId,
+        worker_id: wid,
+        status: 'pending' as const,
+        saturation_score: 0,
+      }))
+    )
 
-    const { error: iwError } = await supabase.from('investigation_workers').insert(iwInserts)
-    if (iwError) {
-      console.error('[investigations POST iw]', iwError)
-      return Response.json({ error: 'Erro ao associar workers.' }, { status: 500 })
-    }
+    const investigation = await db
+      .select({ id: schema.investigations.id, title: schema.investigations.title, status: schema.investigations.status, created_at: schema.investigations.created_at })
+      .from(schema.investigations)
+      .where(eq(schema.investigations.id, invId))
+      .get()
 
     return Response.json({ data: investigation }, { status: 201 })
   } catch (error) {

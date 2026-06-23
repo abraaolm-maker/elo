@@ -1,4 +1,10 @@
-import type { IshikawaCategory } from '../supabase/types'
+export type IshikawaCategory =
+  | 'mao_de_obra'
+  | 'maquina'
+  | 'metodo'
+  | 'material'
+  | 'meio_ambiente'
+  | 'medicao'
 
 // ─── Investigation Engine ─────────────────────────────────────────────────────
 
