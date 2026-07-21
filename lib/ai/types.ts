@@ -19,6 +19,7 @@ export interface InvestigationEngineInput {
   workerRoleDescription: string
   messageHistory: MessageHistoryEntry[]
   crossValidationContext: string
+  managerNotes: string // observações do gestor para este participante nesta investigação
 }
 
 export interface InvestigationEngineOutput {
@@ -69,6 +70,21 @@ export interface SourceSummaryOutput {
   key_points: string[]
 }
 
+export type ActionPlanTimeframe = 'curto_prazo' | 'medio_prazo' | 'longo_prazo'
+
+export interface ActionPlanItemOutput {
+  what: string
+  why: string
+  where_scope: string | null
+  who_role: string | null
+  how_to: string
+  how_much_estimate: string | null
+  impact_score: number     // 0-100
+  effort_score: number     // 0-100
+  is_recurring_pattern: boolean
+  related_pattern_note: string | null
+}
+
 export interface ReportGeneratorOutput {
   root_cause: string
   confidence_score: number
@@ -76,4 +92,5 @@ export interface ReportGeneratorOutput {
   ishikawa_breakdown: IshikawaBreakdownOutput
   sources_summary: SourceSummaryOutput[]
   recommendations: string[]
+  action_plan: ActionPlanItemOutput[]
 }

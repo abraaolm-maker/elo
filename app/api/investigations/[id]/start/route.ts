@@ -45,6 +45,7 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
       .select({
         iw_id: schema.investigation_workers.id,
         worker_id: schema.investigation_workers.worker_id,
+        manager_notes: schema.investigation_workers.manager_notes,
         role: schema.workers.role,
         role_description: schema.workers.role_description,
         whatsapp_number: schema.workers.whatsapp_number,
@@ -69,6 +70,7 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
           workerRoleDescription: iw.role_description ?? '',
           messageHistory: [],
           crossValidationContext: '',
+          managerNotes: iw.manager_notes ?? '',
         })
       } catch (error) {
         console.error('[investigations start] engine error for worker', iw.worker_id, error)

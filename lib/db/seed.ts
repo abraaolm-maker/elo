@@ -1,6 +1,7 @@
 /**
- * Cria o primeiro manager no banco SQLite.
- * Uso: npx tsx lib/db/seed.ts admin@elo.com senha123
+ * Cria o primeiro manager (admin Elo) no banco SQLite.
+ * Uso: npx tsx lib/db/seed.ts admin@elo.com senha123 [NomeDaEmpresa]
+ * O manager criado pelo seed é sempre marcado como is_admin = true.
  */
 import bcrypt from 'bcryptjs'
 import { db, schema } from './index'
@@ -42,15 +43,17 @@ async function main() {
   await db.insert(schema.managers).values({
     id: managerId,
     company_id: companyId,
-    name: 'Admin',
+    name: 'Admin Elo',
     email: email.toLowerCase(),
     password_hash: passwordHash,
+    is_admin: true,
   })
 
-  console.log(`[seed] Manager criado com sucesso!`)
+  console.log(`[seed] Admin Elo criado com sucesso!`)
   console.log(`  Email:      ${email}`)
   console.log(`  Manager ID: ${managerId}`)
   console.log(`  Company ID: ${companyId}`)
+  console.log(`  is_admin:   true`)
 }
 
 main().catch(err => {

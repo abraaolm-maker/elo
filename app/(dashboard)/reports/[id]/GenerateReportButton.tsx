@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 
 interface GenerateReportButtonProps {
   investigationId: string
@@ -11,38 +11,44 @@ interface GenerateReportButtonProps {
 
 export function GenerateReportButton({ investigationId }: GenerateReportButtonProps) {
   const router = useRouter()
+  const toast  = useToast()
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   async function handleGenerate() {
     setLoading(true)
-    setError(null)
-
     try {
-      const res = await fetch(`/api/reports/${investigationId}`, { method: 'POST' })
+      const res  = await fetch(`/api/reports/${investigationId}`, { method: 'POST' })
       const json = await res.json() as { data?: unknown; error?: string }
 
       if (!res.ok) {
-        setError(json.error ?? 'Erro ao gerar relatório')
+        toast.error(json.error ?? 'Erro ao gerar relatório')
         return
       }
 
+      toast.success('Relatório gerado com sucesso!')
       router.refresh()
     } catch {
-      setError('Erro de conexão. Tente novamente.')
+      toast.error('Erro de conexão. Tente novamente.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="space-y-3">
-      <Button onClick={handleGenerate} disabled={loading}>
-        {loading ? 'Gerando relatório…' : 'Gerar relatório'}
-      </Button>
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">{error}</p>
-      )}
-    </div>
+    <button
+      onClick={handleGenerate}
+      disabled={loading}
+      className="flex items-center gap-2 bg-slate-900 text-white text-xs font-semibold uppercase tracking-wider py-2.5 px-5 rounded-sm hover:bg-slate-800 transition-all shadow-sm disabled:opacity-50"
+    >
+      {loading ? (
+        <>
+          <svg className="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Gerando relatório…
+        </>
+      ) : 'Gerar relatório'}
+    </button>
   )
 }

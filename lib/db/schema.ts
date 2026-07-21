@@ -11,12 +11,13 @@ export const companies = sqliteTable('companies', {
 
 // ─── MANAGERS ─────────────────────────────────────────────────────────────────
 export const managers = sqliteTable('managers', {
-  id:         text('id').primaryKey(),
-  company_id: text('company_id').notNull().references(() => companies.id),
-  name:       text('name').notNull(),
-  email:      text('email').notNull().unique(),
+  id:            text('id').primaryKey(),
+  company_id:    text('company_id').notNull().references(() => companies.id),
+  name:          text('name').notNull(),
+  email:         text('email').notNull().unique(),
   password_hash: text('password_hash').notNull(),
-  created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
+  is_admin:      integer('is_admin', { mode: 'boolean' }).notNull().default(false),
+  created_at:    text('created_at').notNull().default(sql`(datetime('now'))`),
 })
 
 // ─── WORKERS ──────────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ export const investigation_workers = sqliteTable('investigation_workers', {
   worker_id:        text('worker_id').notNull().references(() => workers.id),
   status:           text('status').notNull().default('pending'),
   saturation_score: integer('saturation_score').notNull().default(0),
+  manager_notes:    text('manager_notes'),
   created_at:       text('created_at').notNull().default(sql`(datetime('now'))`),
 }, t => ({
   uniq_inv_worker: unique().on(t.investigation_id, t.worker_id),
@@ -88,6 +90,30 @@ export const reports = sqliteTable('reports', {
   generated_at:            text('generated_at').notNull().default(sql`(datetime('now'))`),
 })
 
+// ─── ACTION_ITEMS ─────────────────────────────────────────────────────────────
+export const action_items = sqliteTable('action_items', {
+  id:                   text('id').primaryKey(),
+  report_id:            text('report_id').notNull().references(() => reports.id),
+  // 5W2H
+  what:                 text('what').notNull(),
+  why:                  text('why').notNull(),
+  where_scope:          text('where_scope'),
+  who_role:             text('who_role'),
+  how_to:               text('how_to').notNull(),
+  how_much_estimate:    text('how_much_estimate'),
+  // Priorização (Matriz Impacto x Esforço)
+  impact_score:         integer('impact_score').notNull(),
+  effort_score:         integer('effort_score').notNull(),
+  timeframe:            text('timeframe').notNull(), // 'curto_prazo' | 'medio_prazo' | 'longo_prazo'
+  priority_rank:        integer('priority_rank').notNull(),
+  // PDCA / recorrência
+  is_recurring_pattern: integer('is_recurring_pattern', { mode: 'boolean' }).notNull().default(false),
+  related_pattern_note: text('related_pattern_note'),
+  // Status do gestor
+  status:               text('status').notNull().default('suggested'), // 'suggested' | 'in_progress' | 'done' | 'dismissed'
+  created_at:           text('created_at').notNull().default(sql`(datetime('now'))`),
+})
+
 // ─── Tipos inferidos ──────────────────────────────────────────────────────────
 export type Company                = typeof companies.$inferSelect
 export type Manager                = typeof managers.$inferSelect
@@ -96,6 +122,9 @@ export type Investigation          = typeof investigations.$inferSelect
 export type InvestigationWorker    = typeof investigation_workers.$inferSelect
 export type Message                = typeof messages.$inferSelect
 export type Report                 = typeof reports.$inferSelect
+
+export type ActionItem             = typeof action_items.$inferSelect
+export type NewActionItem          = typeof action_items.$inferInsert
 
 export type NewWorker              = typeof workers.$inferInsert
 export type NewInvestigation       = typeof investigations.$inferInsert

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { REPORT_GENERATOR_SYSTEM_PROMPT } from './prompts'
 import { parseAIJson } from './utils'
-import type { ReportGeneratorInput, ReportGeneratorOutput, IshikawaBreakdownOutput } from './types'
+import type { ReportGeneratorInput, ReportGeneratorOutput, IshikawaBreakdownOutput, ActionPlanItemOutput } from './types'
 
 const ISHIKAWA_KEYS = [
   'mao_de_obra', 'maquina', 'metodo', 'material', 'meio_ambiente', 'medicao',
@@ -80,6 +80,27 @@ function validateOutput(raw: unknown): ReportGeneratorOutput {
     throw new Error('recommendations must be an array of strings')
   }
 
+  // action_plan — opcional para compatibilidade com relatórios antigos
+  const actionPlan: ActionPlanItemOutput[] = []
+  if (Array.isArray(r.action_plan)) {
+    for (const item of r.action_plan) {
+      if (typeof item !== 'object' || item === null) continue
+      const a = item as Record<string, unknown>
+      actionPlan.push({
+        what:                 typeof a.what === 'string'              ? a.what              : '',
+        why:                  typeof a.why === 'string'               ? a.why               : '',
+        where_scope:          typeof a.where_scope === 'string'       ? a.where_scope       : null,
+        who_role:             typeof a.who_role === 'string'          ? a.who_role          : null,
+        how_to:               typeof a.how_to === 'string'            ? a.how_to            : '',
+        how_much_estimate:    typeof a.how_much_estimate === 'string' ? a.how_much_estimate : null,
+        impact_score:         typeof a.impact_score === 'number'      ? Math.min(100, Math.max(0, a.impact_score)) : 50,
+        effort_score:         typeof a.effort_score === 'number'      ? Math.min(100, Math.max(0, a.effort_score)) : 50,
+        is_recurring_pattern: typeof a.is_recurring_pattern === 'boolean' ? a.is_recurring_pattern : false,
+        related_pattern_note: typeof a.related_pattern_note === 'string' ? a.related_pattern_note : null,
+      })
+    }
+  }
+
   return {
     root_cause: r.root_cause,
     confidence_score: r.confidence_score,
@@ -87,6 +108,7 @@ function validateOutput(raw: unknown): ReportGeneratorOutput {
     ishikawa_breakdown: ishikawa,
     sources_summary: sources,
     recommendations: r.recommendations as string[],
+    action_plan: actionPlan,
   }
 }
 

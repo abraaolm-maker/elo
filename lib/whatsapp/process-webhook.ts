@@ -216,6 +216,10 @@ export async function processInboundMessage({
     }))
 
   // ── Chamar o engine de investigação ─────────────────────────────────────────
+  // manager_notes: observações do gestor para este participante nesta investigação
+  // A IA incorpora nas próximas perguntas sem atribuir ao gestor
+  const managerNotes = iw.manager_notes ?? ''
+
   let engineOutput
   try {
     engineOutput = await runInvestigationEngine({
@@ -224,6 +228,7 @@ export async function processInboundMessage({
       workerRoleDescription: worker.role_description ?? '',
       messageHistory,
       crossValidationContext,
+      managerNotes,
     })
   } catch (error) {
     console.error('[process-webhook] investigation engine error', error)

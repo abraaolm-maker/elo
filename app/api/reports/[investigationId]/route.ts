@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm'
 import { generateReport } from '@/lib/ai/report-generator'
 import type { ReportMessageEntry, WorkerAlias } from '@/lib/ai/types'
 import type { IshikawaBreakdownOutput } from '@/lib/ai/types'
+import { assignPriorityRanks } from '@/lib/ai/utils/prioritization'
 import crypto from 'crypto'
 
 function parseJsonField<T>(raw: string | null): T | null {
@@ -150,13 +151,44 @@ export async function POST(
       generated_at: new Date().toISOString(),
     }
 
+    let reportId: string
     if (existingReport) {
       await db
         .update(schema.reports)
         .set(reportValues)
         .where(eq(schema.reports.investigation_id, investigationId))
+      reportId = existingReport.id
     } else {
-      await db.insert(schema.reports).values({ id: crypto.randomUUID(), ...reportValues })
+      reportId = crypto.randomUUID()
+      await db.insert(schema.reports).values({ id: reportId, ...reportValues })
+    }
+
+    // ── Salvar action_items ────────────────────────────────────────────────────
+    // Deletar itens anteriores (no caso de regeneração)
+    await db
+      .delete(schema.action_items)
+      .where(eq(schema.action_items.report_id, reportId))
+
+    if (reportOutput.action_plan.length > 0) {
+      const rankedItems = assignPriorityRanks(reportOutput.action_plan)
+      await db.insert(schema.action_items).values(
+        rankedItems.map(item => ({
+          id:                   crypto.randomUUID(),
+          report_id:            reportId,
+          what:                 item.what,
+          why:                  item.why,
+          where_scope:          item.where_scope,
+          who_role:             item.who_role,
+          how_to:               item.how_to,
+          how_much_estimate:    item.how_much_estimate,
+          impact_score:         item.impact_score,
+          effort_score:         item.effort_score,
+          timeframe:            item.timeframe,
+          priority_rank:        item.priority_rank,
+          is_recurring_pattern: item.is_recurring_pattern,
+          related_pattern_note: item.related_pattern_note,
+        }))
+      )
     }
 
     const saved = await db

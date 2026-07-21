@@ -9,7 +9,7 @@ interface RouteParams {
   params: Promise<{ id: string }>
 }
 
-export default async function InvestigationPage({ params }: RouteParams) {
+export default async function PaginaInvestigacao({ params }: RouteParams) {
   const { id } = await params
   const session = await getSession()
   if (!session) redirect('/login')
@@ -32,8 +32,12 @@ export default async function InvestigationPage({ params }: RouteParams) {
         worker_id: schema.investigation_workers.worker_id,
         status: schema.investigation_workers.status,
         saturation_score: schema.investigation_workers.saturation_score,
+        manager_notes: schema.investigation_workers.manager_notes,
         alias: schema.workers.anonymous_alias,
+        name: schema.workers.name,
         role: schema.workers.role,
+        role_description: schema.workers.role_description,
+        // whatsapp_number NUNCA é exposto no dashboard (regra CLAUDE.md)
       })
       .from(schema.investigation_workers)
       .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
@@ -69,9 +73,12 @@ export default async function InvestigationPage({ params }: RouteParams) {
     iw_id: row.iw_id,
     worker_id: row.worker_id,
     alias: row.alias,
+    name: row.name,
     role: row.role,
+    role_description: row.role_description,
     status: row.status,
     saturation_score: row.saturation_score,
+    manager_notes: row.manager_notes,
   }))
 
   const messages: MessageItem[] = msgRows

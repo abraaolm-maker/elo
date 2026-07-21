@@ -1,39 +1,27 @@
 import { getSession } from '@/lib/auth/session'
 import { db, schema } from '@/lib/db'
-import { eq, and } from 'drizzle-orm'
-import { NewInvestigationClient } from './NewInvestigationClient'
-import type { WorkerOption } from '@/components/investigations/InvestigationForm'
+import { eq } from 'drizzle-orm'
 import { redirect } from 'next/navigation'
+import { ChatInvestigacao } from './ChatInvestigacao'
 
-export default async function NewInvestigationPage() {
+export default async function NovaInvestigacaoPage() {
   const session = await getSession()
   if (!session) redirect('/login')
 
-  const workers = await db
-    .select({
-      id: schema.workers.id,
-      anonymous_alias: schema.workers.anonymous_alias,
-      role: schema.workers.role,
-    })
-    .from(schema.workers)
-    .where(
-      and(
-        eq(schema.workers.company_id, session.companyId),
-        eq(schema.workers.is_active, true)
-      )
-    )
-    .orderBy(schema.workers.created_at)
+  const manager = await db
+    .select({ name: schema.managers.name })
+    .from(schema.managers)
+    .where(eq(schema.managers.id, session.managerId))
+    .get()
 
-  const workerOptions: WorkerOption[] = workers.map(w => ({
-    id: w.id,
-    anonymous_alias: w.anonymous_alias,
-    role: w.role,
-  }))
+  const nome = manager?.name ?? 'Gestor'
+  const primeiroNome = nome.split(' ')[0]
 
-  return (
-    <div className="max-w-xl">
-      <h1 className="text-xl font-semibold mb-6">Nova investigação</h1>
-      <NewInvestigationClient workers={workerOptions} />
-    </div>
-  )
+  const mensagemInicial = `Olá, ${primeiroNome}! 👋 Vou te ajudar a criar uma investigação para identificar a causa raiz do seu problema.
+
+Para começar: **qual problema você quer investigar?**
+
+Pode descrever com suas palavras mesmo — vou fazendo perguntas para entender melhor.`
+
+  return <ChatInvestigacao managerName={nome} mensagemInicial={mensagemInicial} />
 }
