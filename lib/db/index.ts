@@ -3,10 +3,11 @@ import { drizzle } from 'drizzle-orm/libsql'
 import * as schema from './schema'
 
 function buildDb() {
-  if (process.env.TURSO_DATABASE_URL) {
+  const tursoUrl = process.env.TURSO_DATABASE_URL?.replace(/^﻿/, '').trim()
+  if (tursoUrl) {
     const client = createClient({
-      url: process.env.TURSO_DATABASE_URL,
-      authToken: process.env.TURSO_AUTH_TOKEN ?? '',
+      url: tursoUrl,
+      authToken: (process.env.TURSO_AUTH_TOKEN ?? '').replace(/^﻿/, '').trim(),
     })
     return drizzle(client, { schema })
   }
