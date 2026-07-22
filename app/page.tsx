@@ -249,7 +249,7 @@ export default function LandingPage() {
               <strong className="text-slate-500">Science Mentorship Academy</strong> é uma marca registrada de{' '}
               <strong className="text-slate-500">59.613.724 Victor Eduardo Alves da Silva Carvalho</strong> (MEI).{' '}
               Elo é um produto desenvolvido e comercializado pela Science Mentorship Academy.
-              CNPJ 59.613.724/0001-00. Todos os direitos reservados.
+              CNPJ 59.613.724/0001-53. Todos os direitos reservados.
             </p>
           </div>
         </div>
