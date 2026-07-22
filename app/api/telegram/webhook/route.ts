@@ -1,45 +1,85 @@
 import { NextRequest } from 'next/server'
 import { parseTelegramUpdate } from '@/lib/telegram/parser'
-import { getTelegramFileUrl } from '@/lib/telegram/sender'
+import { getTelegramFileUrl, sendTelegramMessage } from '@/lib/telegram/sender'
 import { processInboundMessage } from '@/lib/whatsapp/process-webhook'
-import { downloadAudio } from '@/lib/audio/transcriber'
+import { db, schema } from '@/lib/db'
+import { eq, and } from 'drizzle-orm'
+import crypto from 'crypto'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest): Promise<Response> {
-  // Validar secret token (Telegram passa no header x-telegram-bot-api-secret-token)
   const secret = request.headers.get('x-telegram-bot-api-secret-token')
   if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
     return new Response('Forbidden', { status: 403 })
   }
 
   let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return new Response('OK', { status: 200 })
-  }
+  try { body = await request.json() } catch { return new Response('OK', { status: 200 }) }
 
-  // Processar de forma assíncrona — retornar 200 imediatamente
-  processTelegramUpdate(body).catch(err => {
-    console.error('[telegram-webhook] unhandled error', err)
-  })
+  handleUpdate(body).catch(err => console.error('[telegram-webhook]', err))
 
   return new Response('OK', { status: 200 })
 }
 
-async function processTelegramUpdate(body: unknown): Promise<void> {
+async function handleUpdate(body: unknown): Promise<void> {
   const parsed = parseTelegramUpdate(body)
   if (!parsed) return
 
-  // Telegram usa chatId como identificador — mapeamos para whatsapp_number no banco
-  // Workers cadastrados via Telegram têm whatsapp_number = "tg_<chatId>"
-  const phoneNumber = `tg_${parsed.chatId}`
+  const { chatId, messageId, type, content } = parsed
+  const tgId = `tg_${chatId}`
 
-  let content = parsed.content
+  // ── /start <invCode> — worker abre o bot pelo link de convite ────────────────
+  if (type === 'text' && content.startsWith('/start')) {
+    const parts = content.split(' ')
+    const invCode = parts[1] ?? ''  // ex: "inv_<investigation_id>_<worker_id>"
 
-  // Se for áudio, resolver file_id para URL de download
-  if (parsed.type === 'audio') {
+    if (invCode.startsWith('inv_')) {
+      const [, investigationId, workerId] = invCode.split('_') as [string, string, string]
+
+      // Registrar chatId no worker (atualiza whatsapp_number para tg_<chatId>)
+      await db
+        .update(schema.workers)
+        .set({ whatsapp_number: tgId })
+        .where(eq(schema.workers.id, workerId))
+
+      // Buscar primeira pergunta já salva para este worker nesta investigação
+      const firstQuestion = await db
+        .select({ content: schema.messages.content })
+        .from(schema.messages)
+        .where(
+          and(
+            eq(schema.messages.investigation_id, investigationId),
+            eq(schema.messages.worker_id, workerId),
+            eq(schema.messages.direction, 'outbound')
+          )
+        )
+        .get()
+
+      if (firstQuestion?.content) {
+        await sendTelegramMessage({ chatId, text: firstQuestion.content })
+      } else {
+        await sendTelegramMessage({
+          chatId,
+          text: 'Olá! Você foi convidado para participar de uma investigação operacional.\n\nEm instantes você receberá a primeira pergunta.',
+        })
+      }
+      return
+    }
+
+    // /start sem código — mensagem de boas-vindas genérica
+    await sendTelegramMessage({
+      chatId,
+      text: 'Olá! Este bot é usado pela sua empresa para investigações operacionais.\n\nAguarde o convite da sua empresa para participar.',
+    })
+    return
+  }
+
+  // ── Mensagem normal — processar como resposta de investigação ────────────────
+  let resolvedContent = content
+  if (type === 'audio') {
     try {
-      content = await getTelegramFileUrl(parsed.content)
+      resolvedContent = await getTelegramFileUrl(content)
     } catch (err) {
       console.error('[telegram-webhook] failed to resolve audio URL', err)
       return
@@ -47,12 +87,9 @@ async function processTelegramUpdate(body: unknown): Promise<void> {
   }
 
   await processInboundMessage({
-    phoneNumber,
-    messageId: parsed.messageId,
-    type: parsed.type,
-    content,
+    phoneNumber: tgId,
+    messageId,
+    type,
+    content: resolvedContent,
   })
 }
-
-// Necessário para que o Telegram possa alcançar esta rota (sem cache)
-export const dynamic = 'force-dynamic'
