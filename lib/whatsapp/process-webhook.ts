@@ -2,6 +2,7 @@ import { db, schema } from '@/lib/db'
 import { eq, and, ne, isNotNull } from 'drizzle-orm'
 import { parseWhatsAppPayload, resolveMetaMediaUrl } from './parser'
 import { sendWhatsAppMessage } from './sender'
+import { sendTelegramMessage } from '@/lib/telegram/sender'
 import { downloadAudio, uploadAudioToStorage, transcribeAudio } from '@/lib/audio/transcriber'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import { generateReport } from '@/lib/ai/report-generator'
@@ -105,8 +106,10 @@ export async function processInboundMessage({
 
     try {
       // Para Meta API: content é o Media ID — resolver para URL de download
-      const audioDownloadUrl = await resolveMetaMediaUrl(content)
-      const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
+      // Para Telegram: content já é a URL direta (resolvida no webhook)
+      const isTelegram = phoneNumber.startsWith('tg_')
+      const audioDownloadUrl = isTelegram ? content : await resolveMetaMediaUrl(content)
+      const accessToken = isTelegram ? undefined : process.env.WHATSAPP_ACCESS_TOKEN
 
       const audioBuffer = await downloadAudio(audioDownloadUrl, accessToken)
       const fileName = `${iw.investigation_id}/${worker.id}/${messageId}.ogg`
@@ -131,10 +134,12 @@ export async function processInboundMessage({
           })
           savedMessageId = newMsgId
 
-          await sendWhatsAppMessage({
-            number: worker.whatsapp_number,
-            text: 'Não consegui entender bem o áudio 🎙️\n\nPode repetir sua resposta? Tente falar um pouco mais devagar e em um local mais silencioso.\n\nSe preferir, pode responder por escrito também.',
-          })
+          const retryText = 'Não consegui entender bem o áudio 🎙️\n\nPode repetir sua resposta? Tente falar um pouco mais devagar e em um local mais silencioso.\n\nSe preferir, pode responder por escrito também.'
+          if (worker.whatsapp_number.startsWith('tg_')) {
+            await sendTelegramMessage({ chatId: worker.whatsapp_number.replace('tg_', ''), text: retryText })
+          } else {
+            await sendWhatsAppMessage({ number: worker.whatsapp_number, text: retryText })
+          }
           return
         } else {
           transcriptionStatus = 'permanently_failed'
@@ -260,12 +265,13 @@ export async function processInboundMessage({
       retry_count: 0,
     })
 
-    // Enviar via WhatsApp — falha aqui NÃO aborta o fluxo
-    sendWhatsAppMessage({
-      number: worker.whatsapp_number,
-      text: engineOutput.next_question,
-    }).catch(err => {
-      console.error('[process-webhook] whatsapp send failed (non-fatal)', err)
+    // Enviar pelo canal correto — falha aqui NÃO aborta o fluxo
+    const sendMessage = worker.whatsapp_number.startsWith('tg_')
+      ? sendTelegramMessage({ chatId: worker.whatsapp_number.replace('tg_', ''), text: engineOutput.next_question })
+      : sendWhatsAppMessage({ number: worker.whatsapp_number, text: engineOutput.next_question })
+
+    sendMessage.catch(err => {
+      console.error('[process-webhook] send failed (non-fatal)', err)
     })
 
     return
