@@ -82,21 +82,7 @@ O JSON de retorno deve ter exatamente esta estrutura:
       "key_points": ["ponto 1 que este trabalhador contribuiu", "ponto 2", ...]
     }
   ],
-  "recommendations": ["ação concreta 1", "ação concreta 2", "ação concreta 3"],
-  "action_plan": [
-    {
-      "what": "ação específica e executável",
-      "why": "por que essa ação resolve a causa raiz identificada",
-      "where_scope": "onde se aplica (setor, obra, linha) ou null",
-      "who_role": "cargo ou função que deve executar (nunca nome de pessoa) ou null",
-      "how_to": "como executar, em termos práticos e diretos",
-      "how_much_estimate": "estimativa qualitativa de custo/recurso ou null",
-      "impact_score": 0,
-      "effort_score": 0,
-      "is_recurring_pattern": false,
-      "related_pattern_note": "explicação do padrão recorrente ou null"
-    }
-  ]
+  "recommendations": ["ação concreta 1", "ação concreta 2", "ação concreta 3"]
 }
 
 ─── REGRAS ABSOLUTAS ────────────────────────────────────────────────────────────
@@ -118,20 +104,6 @@ O JSON de retorno deve ter exatamente esta estrutura:
 
 6. FONTES SEM ATRIBUIÇÃO INDIVIDUAL — O sources_summary mostra os pontos-chave por fonte, mas o root_cause e o ishikawa_breakdown não devem atribuir afirmações a trabalhadores específicos. Use linguagem como "evidências apontam que..." ou "múltiplas fontes indicam...".
 
-7. RECOMMENDATIONS — Forneça entre 3 e 5 recomendações no campo "recommendations" como resumo curto em texto livre.
+7. RECOMMENDATIONS — Forneça entre 3 e 5 recomendações no campo "recommendations" como texto curto e acionável.
 
-8. ACTION_PLAN — Além das recomendações, gere um plano de ação estruturado no campo "action_plan" seguindo o formato 5W2H:
-   - what: a ação em si, específica e executável (nunca vago como "melhorar processo")
-   - why: por que essa ação ataca diretamente a causa raiz identificada
-   - where_scope: onde se aplica (obra, setor, linha, turno — se identificável); null se não determinável
-   - who_role: cargo ou função que deve executar (ex: "Supervisor de Produção") — nunca nome de pessoa ou alias
-   - how_to: como executar, em termos práticos e diretos
-   - how_much_estimate: estimativa qualitativa (ex: "baixo custo, ação administrativa", "requer investimento em equipamento"); null se não inferível
-   - impact_score (0-100): quanto essa ação resolve diretamente a causa raiz
-   - effort_score (0-100): quanto de esforço, tempo ou recurso essa ação exige
-   - is_recurring_pattern: true se o padrão de causa identificado já apareceu em outros contextos similares; false caso contrário
-   - related_pattern_note: se is_recurring_pattern = true, explique o padrão; null se false
-
-   Gere entre 2 e 5 ações. Não gere ações genéricas — cada ação deve ser específica o suficiente para ser executável sem mais investigação.
-
-9. JSON PURO — Sua resposta inteira deve ser um JSON válido e nada mais. Se você escrever qualquer texto fora do JSON, o sistema vai quebrar.`
+8. JSON PURO — Sua resposta inteira deve ser um JSON válido e nada mais. Se você escrever qualquer texto fora do JSON ou usar blocos de código markdown (\`\`\`), o sistema vai quebrar.`
