@@ -4,6 +4,7 @@ import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import crypto from 'crypto'
 import OpenAI from 'openai'
 import { toFile } from 'openai/uploads'
+import { env } from '@/lib/utils/env'
 
 interface RouteParams { params: Promise<{ token: string }> }
 
@@ -41,7 +42,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
   if (iw.status === 'saturated') return Response.json({ error: 'Você já concluiu sua participação.' }, { status: 400 })
 
   // Transcrever áudio via Whisper
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  const openai = new OpenAI({ apiKey: env('OPENAI_API_KEY') })
   const arrayBuffer = await audioFile.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
 

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { env } from '@/lib/utils/env'
 import { REPORT_GENERATOR_SYSTEM_PROMPT } from './prompts'
 import { parseAIJson } from './utils'
 import { logUsage } from './cost-tracker'
@@ -128,7 +129,7 @@ async function callClaude(
 export async function generateReport(
   input: ReportGeneratorInput
 ): Promise<ReportGeneratorOutput> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') })
 
   let lastError: unknown
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {

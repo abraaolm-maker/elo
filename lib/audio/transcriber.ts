@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { toFile } from 'openai/uploads'
+import { env } from '@/lib/utils/env'
 import path from 'path'
 import fs from 'fs'
 
@@ -68,7 +69,7 @@ export function isTranscriptionReliable(transcription: VerboseTranscription): bo
 export async function transcribeAudio(
   buffer: Buffer
 ): Promise<{ text: string; reliable: boolean }> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  const openai = new OpenAI({ apiKey: env('OPENAI_API_KEY') })
 
   const raw = await openai.audio.transcriptions.create({
     file: await toFile(buffer, 'audio.ogg', { type: 'audio/ogg' }),

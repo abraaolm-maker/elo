@@ -1,11 +1,12 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
+import { env } from '@/lib/utils/env'
 
 const COOKIE_NAME = 'elo-session'
 const SESSION_DURATION = 60 * 60 * 24 * 7 // 7 dias em segundos
 
 function getSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET
+  const secret = env('JWT_SECRET')
   if (!secret) throw new Error('JWT_SECRET env var is not set')
   return new TextEncoder().encode(secret)
 }

@@ -3,8 +3,9 @@ import { db, schema } from '@/lib/db'
 import { eq, count } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
 import crypto from 'crypto'
+import { env } from '@/lib/utils/env'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const anthropic = new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') })
 
 interface ParticipanteConfirmado {
   name: string
