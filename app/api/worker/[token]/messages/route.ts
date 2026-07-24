@@ -1,5 +1,5 @@
 import { db, schema } from '@/lib/db'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, ne } from 'drizzle-orm'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import crypto from 'crypto'
 
@@ -63,13 +63,14 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .orderBy(schema.messages.created_at)
     .all()
 
-  // Cross-validation: key_points de outros workers
+  // Cross-validation: key_points apenas de OUTROS workers (não do atual)
   const otherPoints = await db
     .select({ key_points_extracted: schema.messages.key_points_extracted })
     .from(schema.messages)
     .where(and(
       eq(schema.messages.investigation_id, iw.investigation_id),
       eq(schema.messages.direction, 'inbound'),
+      ne(schema.messages.worker_id, iw.worker_id),
     ))
     .all()
 

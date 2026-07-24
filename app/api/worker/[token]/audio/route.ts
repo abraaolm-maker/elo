@@ -1,5 +1,5 @@
 import { db, schema } from '@/lib/db'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, ne } from 'drizzle-orm'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import crypto from 'crypto'
 import OpenAI from 'openai'
@@ -90,6 +90,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .where(and(
       eq(schema.messages.investigation_id, iw.investigation_id),
       eq(schema.messages.direction, 'inbound'),
+      ne(schema.messages.worker_id, iw.worker_id),
     ))
     .all()
 

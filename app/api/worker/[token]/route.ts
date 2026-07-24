@@ -1,5 +1,5 @@
 import { db, schema } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 
 interface RouteParams { params: Promise<{ token: string }> }
 
@@ -82,7 +82,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       .where(eq(schema.investigation_workers.id, iw.iw_id))
   }
 
-  // Buscar histórico de mensagens
+  // Buscar histórico de mensagens — filtrar por worker_id para não misturar conversas
   const messages = await db
     .select({
       id: schema.messages.id,
@@ -92,7 +92,10 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       created_at: schema.messages.created_at,
     })
     .from(schema.messages)
-    .where(eq(schema.messages.investigation_id, iw.investigation_id))
+    .where(and(
+      eq(schema.messages.investigation_id, iw.investigation_id),
+      eq(schema.messages.worker_id, iw.worker_id),
+    ))
     .orderBy(schema.messages.created_at)
     .all()
 
