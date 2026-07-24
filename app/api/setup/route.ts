@@ -31,7 +31,133 @@ export async function GET(request: Request) {
 
   const results: string[] = []
 
-  // Tabela api_usage_logs
+  // ── Tabelas base ──────────────────────────────────────────────────────────
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS companies (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      plan       TEXT NOT NULL DEFAULT 'starter',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'tabela companies'))
+
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS managers (
+      id            TEXT PRIMARY KEY,
+      company_id    TEXT NOT NULL REFERENCES companies(id),
+      name          TEXT NOT NULL,
+      email         TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL DEFAULT '',
+      is_admin      INTEGER NOT NULL DEFAULT 0,
+      is_active     INTEGER NOT NULL DEFAULT 1,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'tabela managers'))
+
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS workers (
+      id               TEXT PRIMARY KEY,
+      company_id       TEXT NOT NULL REFERENCES companies(id),
+      name             TEXT NOT NULL DEFAULT '',
+      full_name        TEXT,
+      cpf              TEXT,
+      role             TEXT NOT NULL,
+      role_description TEXT,
+      whatsapp_number  TEXT NOT NULL,
+      anonymous_alias  TEXT NOT NULL,
+      is_active        INTEGER NOT NULL DEFAULT 1,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(company_id, whatsapp_number)
+    )
+  `, 'tabela workers'))
+
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS investigations (
+      id                  TEXT PRIMARY KEY,
+      company_id          TEXT NOT NULL REFERENCES companies(id),
+      manager_id          TEXT NOT NULL REFERENCES managers(id),
+      title               TEXT NOT NULL,
+      problem_description TEXT NOT NULL,
+      ishikawa_category   TEXT,
+      status              TEXT NOT NULL DEFAULT 'pending',
+      created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at        TEXT
+    )
+  `, 'tabela investigations'))
+
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS investigation_workers (
+      id               TEXT PRIMARY KEY,
+      investigation_id TEXT NOT NULL REFERENCES investigations(id),
+      worker_id        TEXT NOT NULL REFERENCES workers(id),
+      status           TEXT NOT NULL DEFAULT 'pending',
+      saturation_score INTEGER NOT NULL DEFAULT 0,
+      manager_notes    TEXT,
+      access_token     TEXT UNIQUE,
+      push_subscription TEXT,
+      first_accessed_at TEXT,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(investigation_id, worker_id)
+    )
+  `, 'tabela investigation_workers'))
+
+  results.push(await runSafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_iw_access_token ON investigation_workers(access_token)
+  `, 'index access_token'))
+
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id                   TEXT PRIMARY KEY,
+      investigation_id     TEXT NOT NULL REFERENCES investigations(id),
+      worker_id            TEXT NOT NULL REFERENCES workers(id),
+      direction            TEXT NOT NULL,
+      content_type         TEXT NOT NULL DEFAULT 'text',
+      content              TEXT,
+      audio_url            TEXT,
+      raw_whatsapp_id      TEXT UNIQUE,
+      transcription_status TEXT NOT NULL DEFAULT 'not_applicable',
+      retry_count          INTEGER NOT NULL DEFAULT 0,
+      key_points_extracted TEXT,
+      created_at           TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'tabela messages'))
+
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id                       TEXT PRIMARY KEY,
+      investigation_id         TEXT NOT NULL UNIQUE REFERENCES investigations(id),
+      root_cause               TEXT NOT NULL,
+      confidence_score         INTEGER NOT NULL,
+      confidence_justification TEXT,
+      ishikawa_breakdown       TEXT,
+      sources_summary          TEXT,
+      recommendations          TEXT,
+      generated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'tabela reports'))
+
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS action_items (
+      id                   TEXT PRIMARY KEY,
+      report_id            TEXT NOT NULL REFERENCES reports(id),
+      what                 TEXT NOT NULL,
+      why                  TEXT NOT NULL,
+      where_scope          TEXT,
+      who_role             TEXT,
+      how_to               TEXT NOT NULL,
+      how_much_estimate    TEXT,
+      impact_score         INTEGER NOT NULL,
+      effort_score         INTEGER NOT NULL,
+      timeframe            TEXT NOT NULL,
+      priority_rank        INTEGER NOT NULL,
+      is_recurring_pattern INTEGER NOT NULL DEFAULT 0,
+      related_pattern_note TEXT,
+      status               TEXT NOT NULL DEFAULT 'suggested',
+      created_at           TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'tabela action_items'))
+
+  // ── Tabela api_usage_logs ─────────────────────────────────────────────────
   results.push(await runSafe(`
     CREATE TABLE IF NOT EXISTS api_usage_logs (
       id               TEXT PRIMARY KEY,
