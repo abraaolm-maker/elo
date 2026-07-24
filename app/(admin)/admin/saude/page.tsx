@@ -33,8 +33,11 @@ export default function AdminSaudePage() {
   async function reprocess(id: string) {
     setReprocessing(id)
     setMessages(m => ({ ...m, [id]: '' }))
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 58_000)
     try {
-      const res = await fetch(`/api/admin/investigations/${id}/reprocess`, { method: 'POST' })
+      const res = await fetch(`/api/admin/investigations/${id}/reprocess`, { method: 'POST', signal: controller.signal })
+      clearTimeout(timeout)
       if (res.ok) {
         setMessages(m => ({ ...m, [id]: 'Relatório gerado com sucesso!' }))
         setTimeout(() => load(), 800)
@@ -42,8 +45,10 @@ export default function AdminSaudePage() {
         const j = await res.json() as { error?: string }
         setMessages(m => ({ ...m, [id]: j.error ?? 'Erro ao reprocessar' }))
       }
-    } catch {
-      setMessages(m => ({ ...m, [id]: 'Erro de conexão' }))
+    } catch (err) {
+      clearTimeout(timeout)
+      const isTimeout = err instanceof Error && err.name === 'AbortError'
+      setMessages(m => ({ ...m, [id]: isTimeout ? 'Tempo esgotado — plano Vercel Hobby tem limite de 10s. Atualize para Pro ou tente novamente.' : 'Erro de conexão' }))
     } finally {
       setReprocessing(null)
     }

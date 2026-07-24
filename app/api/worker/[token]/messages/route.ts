@@ -1,3 +1,5 @@
+export const maxDuration = 60
+
 import { db, schema } from '@/lib/db'
 import { eq, and, ne } from 'drizzle-orm'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'

@@ -1,3 +1,5 @@
+export const maxDuration = 60
+
 import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
 import { db, schema } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'

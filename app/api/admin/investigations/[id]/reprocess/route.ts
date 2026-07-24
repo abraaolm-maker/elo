@@ -1,3 +1,5 @@
+export const maxDuration = 60
+
 import { db, schema } from '@/lib/db'
 import { requireAdmin, isForbiddenError, forbiddenResponse, unauthorizedResponse, isUnauthorizedError } from '@/lib/auth/middleware'
 import { eq } from 'drizzle-orm'

@@ -120,7 +120,7 @@ async function callClaude(
 ): Promise<Anthropic.Message> {
   return client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 8192,
+    max_tokens: 2048,
     system: REPORT_GENERATOR_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: JSON.stringify(input) }],
   })
