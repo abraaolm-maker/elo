@@ -73,6 +73,9 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
           messageHistory: [],
           crossValidationContext: '',
           managerNotes: iw.manager_notes ?? '',
+          companyId: investigation.company_id,
+          managerId: investigation.manager_id,
+          investigationId: id,
         })
       } catch (error) {
         console.error('[investigations start] engine error for worker', iw.worker_id, error)

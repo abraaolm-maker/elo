@@ -4,6 +4,7 @@ import { eq, count } from 'drizzle-orm'
 import Anthropic from '@anthropic-ai/sdk'
 import crypto from 'crypto'
 import { env } from '@/lib/utils/env'
+import { logUsage } from '@/lib/ai/cost-tracker'
 
 const anthropic = new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') })
 
@@ -151,6 +152,17 @@ export async function POST(request: Request): Promise<Response> {
     })
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : ''
+
+    if (response.usage) {
+      logUsage({
+        companyId: session.companyId,
+        managerId: session.managerId,
+        operation: 'investigation_engine',
+        model: 'claude-sonnet-4-6',
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      }).catch(() => {})
+    }
 
     let parsed = extrairJSON(rawText)
 

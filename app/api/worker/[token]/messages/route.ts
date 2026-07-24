@@ -25,6 +25,8 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       manager_notes: schema.investigation_workers.manager_notes,
       investigation_status: schema.investigations.status,
       problem_description: schema.investigations.problem_description,
+      company_id: schema.investigations.company_id,
+      manager_id: schema.investigations.manager_id,
       worker_cpf: schema.workers.cpf,
       worker_role: schema.workers.role,
       worker_role_description: schema.workers.role_description,
@@ -88,6 +90,9 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     messageHistory: allMessages.filter(m => m.content !== null) as { direction: 'outbound' | 'inbound'; content: string }[],
     crossValidationContext,
     managerNotes: iw.manager_notes ?? '',
+    companyId: iw.company_id,
+    managerId: iw.manager_id,
+    investigationId: iw.investigation_id,
   })
 
   // Salvar key_points na última mensagem inbound
