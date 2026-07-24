@@ -60,12 +60,13 @@ export async function GET(request: Request): Promise<Response> {
   }
 }
 
-interface ParticipanteInput {
-  name: string
-  role: string
-  role_description?: string
-  whatsapp_number: string
-  manager_notes?: string
+// Participante pode ser worker já cadastrado (worker_id) ou novo (name + whatsapp_number + role)
+type ParticipanteInput =
+  | { worker_id: string; manager_notes?: string }
+  | { name: string; full_name?: string; cpf?: string; role: string; role_description?: string; whatsapp_number?: string; manager_notes?: string }
+
+function isWorkerIdParticipante(p: ParticipanteInput): p is { worker_id: string; manager_notes?: string } {
+  return 'worker_id' in p && typeof (p as { worker_id: string }).worker_id === 'string'
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -83,16 +84,6 @@ export async function POST(request: Request): Promise<Response> {
     }
     if (participantes.length < 1) {
       return Response.json({ error: 'Adicione pelo menos um participante.' }, { status: 400 })
-    }
-
-    // Validar campos obrigatórios dos participantes
-    for (const p of participantes) {
-      if (!p.name?.trim()) return Response.json({ error: 'Nome do participante é obrigatório.' }, { status: 400 })
-      if (!p.role?.trim()) return Response.json({ error: 'Cargo do participante é obrigatório.' }, { status: 400 })
-      if (!p.whatsapp_number?.trim()) return Response.json({ error: 'WhatsApp do participante é obrigatório.' }, { status: 400 })
-      // Normalizar número: remover tudo que não é dígito
-      const numLimpo = p.whatsapp_number.replace(/\D/g, '')
-      if (numLimpo.length < 10) return Response.json({ error: `Número de WhatsApp inválido: ${p.whatsapp_number}` }, { status: 400 })
     }
 
     // Criar investigação
@@ -117,54 +108,78 @@ export async function POST(request: Request): Promise<Response> {
     }[] = []
 
     for (const p of participantes) {
-      const numLimpo = p.whatsapp_number.replace(/\D/g, '')
+      let workerId: string = ''
 
-      // Tentar encontrar worker existente pelo número + empresa
-      let worker = await db
-        .select()
-        .from(schema.workers)
-        .where(
-          and(
-            eq(schema.workers.company_id, session.companyId),
-            eq(schema.workers.whatsapp_number, numLimpo)
-          )
-        )
-        .get()
-
-      if (!worker) {
-        // Criar novo worker
-        const alias = await gerarAlias(session.companyId)
-        const workerId = crypto.randomUUID()
-        await db.insert(schema.workers).values({
-          id: workerId,
-          company_id: session.companyId,
-          name: p.name.trim(),
-          role: p.role.trim(),
-          role_description: p.role_description?.trim() ?? null,
-          whatsapp_number: numLimpo,
-          anonymous_alias: alias,
-          is_active: true,
-        })
-        worker = await db.select().from(schema.workers).where(eq(schema.workers.id, workerId)).get()!
+      if (isWorkerIdParticipante(p)) {
+        // Worker já cadastrado — validar que pertence à company
+        const existing = await db
+          .select({ id: schema.workers.id })
+          .from(schema.workers)
+          .where(and(eq(schema.workers.id, p.worker_id), eq(schema.workers.company_id, session.companyId)))
+          .get()
+        if (!existing) return Response.json({ error: 'Trabalhador não encontrado.' }, { status: 404 })
+        workerId = existing.id
       } else {
-        // Atualizar dados do worker existente (nome/cargo podem ter mudado)
-        await db.update(schema.workers)
-          .set({
+        // Novo worker
+        if (!p.name?.trim()) return Response.json({ error: 'Nome do participante é obrigatório.' }, { status: 400 })
+        if (!p.role?.trim()) return Response.json({ error: 'Cargo do participante é obrigatório.' }, { status: 400 })
+
+        // WhatsApp é opcional — valida só se informado
+        let numLimpo = p.whatsapp_number?.replace(/\D/g, '') ?? ''
+        if (numLimpo) {
+          if (!numLimpo.startsWith('55') || numLimpo.length < 12 || numLimpo.length > 13) {
+            return Response.json({ error: `Número de WhatsApp inválido: ${p.whatsapp_number}. Use o formato: 5511999999999` }, { status: 400 })
+          }
+          // Verificar se já existe esse número na empresa
+          const workerExistente = await db
+            .select()
+            .from(schema.workers)
+            .where(and(eq(schema.workers.company_id, session.companyId), eq(schema.workers.whatsapp_number, numLimpo)))
+            .get()
+
+          if (workerExistente) {
+            await db.update(schema.workers)
+              .set({ name: p.name.trim(), role: p.role.trim(), role_description: p.role_description?.trim() ?? workerExistente.role_description })
+              .where(eq(schema.workers.id, workerExistente.id))
+            workerId = workerExistente.id
+          }
+        }
+
+        if (!workerId) {
+          // Criar novo worker (sem WhatsApp ou WhatsApp não duplicado)
+          const alias = await gerarAlias(session.companyId)
+          const newId = crypto.randomUUID()
+          const cpfDigits = p.cpf?.replace(/\D/g, '') ?? null
+          // Sem WhatsApp: usar placeholder único para satisfazer a coluna NOT NULL
+          const whatsappFinal = numLimpo || `portal:${newId}`
+          await db.insert(schema.workers).values({
+            id: newId,
+            company_id: session.companyId,
             name: p.name.trim(),
+            full_name: p.full_name?.trim() ?? null,
+            cpf: cpfDigits && cpfDigits.length === 11 ? cpfDigits : null,
             role: p.role.trim(),
-            role_description: p.role_description?.trim() ?? worker.role_description,
+            role_description: p.role_description?.trim() ?? null,
+            whatsapp_number: whatsappFinal,
+            anonymous_alias: alias,
+            is_active: true,
           })
-          .where(eq(schema.workers.id, worker.id))
+          workerId = newId
+        }
       }
 
-      iwValues.push({
-        id: crypto.randomUUID(),
-        investigation_id: invId,
-        worker_id: worker!.id,
-        status: 'pending' as const,
-        saturation_score: 0,
-        manager_notes: p.manager_notes?.trim() ?? null,
-      })
+      // Verificar duplicata na mesma investigação
+      const jaVinculado = iwValues.some(iw => iw.worker_id === workerId)
+      if (!jaVinculado) {
+        iwValues.push({
+          id: crypto.randomUUID(),
+          investigation_id: invId,
+          worker_id: workerId,
+          status: 'pending' as const,
+          saturation_score: 0,
+          manager_notes: p.manager_notes?.trim() ?? null,
+        })
+      }
     }
 
     await db.insert(schema.investigation_workers).values(iwValues)

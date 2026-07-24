@@ -33,6 +33,8 @@ export default async function PaginaInvestigacao({ params }: RouteParams) {
         status: schema.investigation_workers.status,
         saturation_score: schema.investigation_workers.saturation_score,
         manager_notes: schema.investigation_workers.manager_notes,
+        access_token: schema.investigation_workers.access_token,
+        first_accessed_at: schema.investigation_workers.first_accessed_at,
         alias: schema.workers.anonymous_alias,
         name: schema.workers.name,
         role: schema.workers.role,
@@ -79,6 +81,8 @@ export default async function PaginaInvestigacao({ params }: RouteParams) {
     status: row.status,
     saturation_score: row.saturation_score,
     manager_notes: row.manager_notes,
+    access_token: row.access_token ?? null,
+    first_accessed_at: row.first_accessed_at ?? null,
   }))
 
   const messages: MessageItem[] = msgRows

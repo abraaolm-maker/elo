@@ -21,7 +21,11 @@ const spaceMono = Space_Mono({
 
 export const metadata: Metadata = {
   title: "Elo — Inteligência Operacional",
-  description: "Investigação de causa raiz via WhatsApp",
+  description: "Investigação de causa raiz operacional",
+  manifest: "/manifest.json",
+  other: {
+    "facebook-domain-verification": "v8tj5xk5l3p53mbi1p4b43lci33xq5",
+  },
 };
 
 export default function RootLayout({

@@ -30,7 +30,8 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/')
+      const data = await res.json() as { ok: boolean; isAdmin: boolean }
+      router.push(data.isAdmin ? '/admin' : '/investigations')
       router.refresh()
     } catch {
       setError('Erro de conexão. Tente novamente.')

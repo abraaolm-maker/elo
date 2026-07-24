@@ -1,64 +1,46 @@
-import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
-import { db, schema } from '@/lib/db'
-import { eq } from 'drizzle-orm'
-import bcrypt from 'bcryptjs'
-import crypto from 'crypto'
+import { db, schema } from "@/lib/db"
+import { requireAdmin, isForbiddenError, forbiddenResponse, unauthorizedResponse, isUnauthorizedError } from "@/lib/auth/middleware"
+import { count, sum, eq } from "drizzle-orm"
+import crypto from "crypto"
+import bcrypt from "bcryptjs"
 
-function gerarSenha(): string {
-  const chars = 'abcdefghjkmnpqrstuvwxyz23456789'
-  return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-}
-
-async function verificarAdmin(managerId: string): Promise<boolean> {
-  const manager = await db
-    .select({ is_admin: schema.managers.is_admin })
-    .from(schema.managers)
-    .where(eq(schema.managers.id, managerId))
-    .get()
-  return manager?.is_admin === true
-}
-
-// POST /api/admin/managers — adicionar gestor a empresa existente
-export async function POST(request: Request): Promise<Response> {
+export async function GET(request: Request) {
   try {
-    const session = await requireAuth(request)
-    if (!(await verificarAdmin(session.managerId))) {
-      return Response.json({ error: 'Acesso negado' }, { status: 403 })
-    }
-
-    const body = await request.json() as { company_id?: string; name?: string; email?: string }
-
-    if (!body.company_id?.trim()) return Response.json({ error: 'Empresa é obrigatória' }, { status: 400 })
-    if (!body.name?.trim()) return Response.json({ error: 'Nome é obrigatório' }, { status: 400 })
-    if (!body.email?.trim()) return Response.json({ error: 'Email é obrigatório' }, { status: 400 })
-
-    const existing = await db
-      .select({ id: schema.managers.id })
-      .from(schema.managers)
-      .where(eq(schema.managers.email, body.email.toLowerCase()))
-      .get()
-
-    if (existing) return Response.json({ error: 'Email já cadastrado' }, { status: 409 })
-
-    const senha = gerarSenha()
-    const senhaHash = await bcrypt.hash(senha, 12)
-    const managerId = crypto.randomUUID()
-
-    await db.insert(schema.managers).values({
-      id: managerId,
-      company_id: body.company_id.trim(),
-      name: body.name.trim(),
-      email: body.email.toLowerCase(),
-      password_hash: senhaHash,
-      is_admin: false,
-    })
-
-    return Response.json({
-      data: { manager_id: managerId, email: body.email.toLowerCase(), senha_temporaria: senha },
-    }, { status: 201 })
+    await requireAdmin(request)
+    const managers = await db.select().from(schema.managers).orderBy(schema.managers.created_at)
+    const result = await Promise.all(managers.map(async (m) => {
+      const company = await db.select({ name: schema.companies.name }).from(schema.companies).where(eq(schema.companies.id, m.company_id)).get()
+      const [invRow] = await db.select({ total: count() }).from(schema.investigations).where(eq(schema.investigations.manager_id, m.id))
+      const [costRow] = await db.select({ brl: sum(schema.api_usage_logs.cost_brl) }).from(schema.api_usage_logs).where(eq(schema.api_usage_logs.manager_id, m.id))
+      return { id: m.id, name: m.name, email: m.email, is_admin: m.is_admin, created_at: m.created_at, company_id: m.company_id, company_name: company?.name ?? "", investigations_count: invRow?.total ?? 0, total_cost_brl: Number(costRow?.brl ?? 0) }
+    }))
+    return Response.json({ data: result })
   } catch (error) {
-    if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
-    console.error('[POST /api/admin/managers]', error)
-    return Response.json({ error: 'Erro interno' }, { status: 500 })
+    if (isUnauthorizedError(error)) return unauthorizedResponse()
+    if (isForbiddenError(error)) return forbiddenResponse()
+    console.error("[admin/managers GET]", error)
+    return Response.json({ error: "Erro interno" }, { status: 500 })
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    await requireAdmin(request)
+    const body = await request.json() as unknown
+    if (typeof body !== "object" || body === null) return Response.json({ error: "Corpo invalido" }, { status: 400 })
+    const { name, email, password, company_id, is_admin } = body as Record<string, unknown>
+    if (typeof name !== "string" || typeof email !== "string" || typeof password !== "string" || typeof company_id !== "string") {
+      return Response.json({ error: "name, email, password e company_id sao obrigatorios" }, { status: 400 })
+    }
+    const passwordHash = await bcrypt.hash(password, 10)
+    const id = crypto.randomUUID()
+    await db.insert(schema.managers).values({ id, company_id, name: name.trim(), email: email.toLowerCase().trim(), password_hash: passwordHash, is_admin: is_admin === true })
+    const manager = await db.select({ id: schema.managers.id, name: schema.managers.name, email: schema.managers.email, is_admin: schema.managers.is_admin, created_at: schema.managers.created_at }).from(schema.managers).where(eq(schema.managers.id, id)).get()
+    return Response.json({ data: manager }, { status: 201 })
+  } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse()
+    if (isForbiddenError(error)) return forbiddenResponse()
+    console.error("[admin/managers POST]", error)
+    return Response.json({ error: "Erro interno" }, { status: 500 })
   }
 }

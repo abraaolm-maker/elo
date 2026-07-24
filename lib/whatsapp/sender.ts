@@ -8,14 +8,19 @@ interface SendMessageResult {
   error?: string
 }
 
-// Meta WhatsApp Business Cloud API
-// Docs: https://developers.facebook.com/docs/whatsapp/cloud-api/messages
+// WhatsApp via Meta Cloud API oficial.
+// Baileys e WPPConnect foram removidos — causavam banimento.
+// Para ativar: configure WHATSAPP_ACCESS_TOKEN e WHATSAPP_PHONE_NUMBER_ID no .env.local
 export async function sendWhatsAppMessage(params: SendMessageParams): Promise<SendMessageResult> {
+  return sendViaMeta(params)
+}
+
+async function sendViaMeta(params: SendMessageParams): Promise<SendMessageResult> {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
 
   if (!accessToken || !phoneNumberId) {
-    console.error('[whatsapp-sender] WHATSAPP_ACCESS_TOKEN ou WHATSAPP_PHONE_NUMBER_ID não configurados')
+    console.error('[whatsapp-sender/meta] WHATSAPP_ACCESS_TOKEN ou WHATSAPP_PHONE_NUMBER_ID não configurados')
     return { success: false, error: 'WhatsApp env vars not configured' }
   }
 
@@ -40,13 +45,13 @@ export async function sendWhatsAppMessage(params: SendMessageParams): Promise<Se
 
     if (!response.ok) {
       const body = await response.text()
-      console.error('[whatsapp-sender] HTTP error', response.status, body)
+      console.error('[whatsapp-sender/meta] HTTP error', response.status, body)
       return { success: false, error: `HTTP ${response.status}` }
     }
 
     return { success: true }
   } catch (error) {
-    console.error('[whatsapp-sender]', error)
+    console.error('[whatsapp-sender/meta]', error)
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
   }
 }

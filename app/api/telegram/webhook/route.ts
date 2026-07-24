@@ -27,6 +27,7 @@ async function handleUpdate(body: unknown): Promise<void> {
   if (!parsed) return
 
   const { chatId, messageId, type, content } = parsed
+  console.error('[telegram-webhook] chatId=' + chatId + ' type=' + type + ' content=' + content)
   const tgId = `tg_${chatId}`
 
   // ── /start <invCode> — worker abre o bot pelo link de convite ────────────────

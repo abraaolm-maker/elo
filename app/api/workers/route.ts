@@ -10,6 +10,7 @@ function generateAlias(index: number): string {
 }
 
 function maskNumber(phone: string): string {
+  if (phone.startsWith('portal:')) return 'Sem WhatsApp'
   return `****${phone.slice(-4)}`
 }
 
@@ -63,12 +64,15 @@ export async function POST(request: Request): Promise<Response> {
 
     const body = await request.json() as Record<string, unknown>
     const name = typeof body.name === 'string' ? body.name.trim() : ''
+    const full_name = typeof body.full_name === 'string' ? body.full_name.trim() : ''
+    const cpf = typeof body.cpf === 'string' ? body.cpf.replace(/\D/g, '') : ''
     const role = typeof body.role === 'string' ? body.role.trim() : ''
     const role_description = typeof body.role_description === 'string' ? body.role_description.trim() : ''
     const whatsapp_number = typeof body.whatsapp_number === 'string' ? body.whatsapp_number.trim() : ''
 
     if (!name) return Response.json({ error: 'O nome é obrigatório.' }, { status: 400 })
     if (!role) return Response.json({ error: 'O cargo é obrigatório.' }, { status: 400 })
+    if (cpf && cpf.length !== 11) return Response.json({ error: 'CPF inválido.' }, { status: 400 })
     if (!whatsapp_number) return Response.json({ error: 'O número WhatsApp é obrigatório.' }, { status: 400 })
 
     const numberError = validateWhatsAppNumber(whatsapp_number)
@@ -103,6 +107,8 @@ export async function POST(request: Request): Promise<Response> {
       id: newId,
       company_id: session.companyId,
       name,
+      full_name: full_name || null,
+      cpf: cpf || null,
       role,
       role_description: role_description || null,
       whatsapp_number,

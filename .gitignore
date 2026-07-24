@@ -48,3 +48,10 @@ dev-server.log.err
 
 # Áudios do WhatsApp (local storage — não commitar)
 /storage/
+
+# Serviços auxiliares (não fazem parte do deploy Vercel)
+baileys-service/
+wppconnect-service/
+
+.vercel
+.env*

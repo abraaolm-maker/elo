@@ -13,7 +13,9 @@ interface Mensagem {
 
 interface Participante {
   name: string
-  whatsapp_number: string
+  full_name?: string
+  cpf?: string
+  whatsapp_number?: string
   role: string
   role_description: string
   manager_notes: string
@@ -36,6 +38,15 @@ interface ChatRespostaAPI {
     investigacao_pronta?: boolean
   }
   investigation_id?: string | null
+}
+
+interface WorkerCadastrado {
+  id: string
+  anonymous_alias: string
+  role: string
+  role_description: string | null
+  whatsapp_masked: string
+  is_active: boolean
 }
 
 // ─── Indicador de digitando ───────────────────────────────────────────────────
@@ -110,124 +121,6 @@ function BolhaMensagem({ msg }: { msg: Mensagem }) {
   )
 }
 
-// ─── Formulário de participante ───────────────────────────────────────────────
-
-interface FormParticipanteProps {
-  onAdicionar: (p: Participante) => void
-}
-
-function FormParticipante({ onAdicionar }: FormParticipanteProps) {
-  const [name, setName] = useState('')
-  const [whatsapp, setWhatsapp] = useState('')
-  const [role, setRole] = useState('')
-  const [roleDesc, setRoleDesc] = useState('')
-  const [notes, setNotes] = useState('')
-  const [erro, setErro] = useState<string | null>(null)
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setErro(null)
-    if (!name.trim()) { setErro('Nome é obrigatório'); return }
-    if (!whatsapp.trim()) { setErro('WhatsApp é obrigatório'); return }
-    if (!role.trim()) { setErro('Cargo é obrigatório'); return }
-
-    const num = whatsapp.replace(/\D/g, '')
-    if (num.length < 10) { setErro('Número de WhatsApp inválido (inclua DDD)'); return }
-
-    onAdicionar({
-      name: name.trim(),
-      whatsapp_number: whatsapp.trim(),
-      role: role.trim(),
-      role_description: roleDesc.trim(),
-      manager_notes: notes.trim(),
-    })
-
-    setName(''); setWhatsapp(''); setRole(''); setRoleDesc(''); setNotes('')
-  }
-
-  const inputClass = "w-full border border-slate-200 rounded-sm px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white transition-all"
-  const labelClass = "block text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5"
-
-  return (
-    <form onSubmit={handleSubmit} className="border border-slate-200 rounded-sm bg-white overflow-hidden shadow-sm">
-      <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-100">
-        <p className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'var(--font-jakarta)' }}>Novo participante</p>
-        <p className="text-xs text-slate-400 mt-0.5">Preencha os dados de quem será consultado pela IA</p>
-      </div>
-
-      <div className="p-5 space-y-4">
-        {/* Linha 1: Nome + WhatsApp */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={labelClass}>
-              Nome completo <span className="text-red-400">*</span>
-            </label>
-            <input id="p-name" value={name} onChange={e => setName(e.target.value)} placeholder="João da Silva" className={inputClass} />
-          </div>
-          <div>
-            <label className={labelClass}>
-              WhatsApp <span className="text-red-400">*</span>
-            </label>
-            <input id="p-wa" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="55 11 99999-9999" className={inputClass} />
-          </div>
-        </div>
-
-        {/* Cargo */}
-        <div>
-          <label className={labelClass}>
-            Cargo <span className="text-red-400">*</span>
-          </label>
-          <input id="p-role" value={role} onChange={e => setRole(e.target.value)} placeholder="Ex: Mestre de obras, Supervisor de linha, Operador…" className={inputClass} />
-        </div>
-
-        {/* Responsabilidades */}
-        <div>
-          <label className={labelClass}>Responsabilidades do cargo</label>
-          <textarea
-            id="p-desc"
-            value={roleDesc}
-            onChange={e => setRoleDesc(e.target.value)}
-            placeholder="O que essa pessoa faz no dia a dia? Quanto mais detalhado, melhor a qualidade das perguntas da IA."
-            rows={3}
-            className={`${inputClass} resize-none`}
-          />
-        </div>
-
-        {/* Observações */}
-        <div>
-          <label className={labelClass}>
-            Observações para a IA <span className="text-slate-300 font-normal normal-case tracking-normal">(opcional)</span>
-          </label>
-          <textarea
-            id="p-notes"
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="O que você quer que a IA explore com essa pessoa em específico?"
-            rows={2}
-            className={`${inputClass} resize-none`}
-          />
-        </div>
-
-        {erro && (
-          <div className="bg-red-50 border border-red-200 rounded-sm px-3 py-2">
-            <p className="text-xs text-red-700">{erro}</p>
-          </div>
-        )}
-
-        <button
-          type="submit"
-          className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white text-xs font-semibold uppercase tracking-wider py-2.5 rounded-sm hover:bg-slate-800 transition-all"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Adicionar participante
-        </button>
-      </div>
-    </form>
-  )
-}
-
 // ─── Card de participante adicionado ──────────────────────────────────────────
 
 function CardParticipante({ p, onRemover }: { p: Participante; onRemover: () => void }) {
@@ -239,7 +132,7 @@ function CardParticipante({ p, onRemover }: { p: Participante; onRemover: () => 
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-900 truncate">{p.name}</p>
-          <p className="text-xs text-slate-400 font-mono truncate">{p.role}</p>
+          <p className="text-xs text-slate-400 truncate">{p.role}</p>
         </div>
       </div>
       <button
@@ -256,6 +149,247 @@ function CardParticipante({ p, onRemover }: { p: Participante; onRemover: () => 
   )
 }
 
+// ─── Formulário de participante ───────────────────────────────────────────────
+
+interface FormParticipanteProps {
+  onAdicionar: (p: Participante) => void
+  workersJaAdicionados: string[] // whatsapp_number dos já adicionados (para filtrar)
+}
+
+function FormParticipante({ onAdicionar, workersJaAdicionados }: FormParticipanteProps) {
+  const [aba, setAba] = useState<'existente' | 'novo'>('existente')
+  const [workersCadastrados, setWorkersCadastrados] = useState<WorkerCadastrado[]>([])
+  const [carregandoWorkers, setCarregandoWorkers] = useState(true)
+
+  // campos de novo worker
+  const [name, setName] = useState('')
+  const [cpf, setCpf] = useState('')
+  const [whatsapp, setWhatsapp] = useState('')
+  const [role, setRole] = useState('')
+  const [roleDesc, setRoleDesc] = useState('')
+  const [notes, setNotes] = useState('')
+  const [erro, setErro] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/workers')
+      .then(r => r.json())
+      .then((d: { data: WorkerCadastrado[] }) => setWorkersCadastrados(d.data ?? []))
+      .catch(() => {/* silencioso */})
+      .finally(() => setCarregandoWorkers(false))
+  }, [])
+
+  const workersDisponiveis = workersCadastrados.filter(
+    w => w.is_active
+  )
+
+  function selecionarWorkerExistente(w: WorkerCadastrado) {
+    // Não temos o número real (masked), mas a API de criação vai buscar pelo ID
+    // Por isso vamos adicionar com um placeholder e flag especial
+    // Na verdade, precisamos passar o worker_id — mas o tipo Participante usa whatsapp_number
+    // Solução: usar worker_id como whatsapp_number com prefixo especial "id:"
+    onAdicionar({
+      name: w.anonymous_alias,
+      whatsapp_number: `__id:${w.id}`,
+      role: w.role,
+      role_description: w.role_description ?? '',
+      manager_notes: '',
+    })
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setErro(null)
+    if (!name.trim()) { setErro('Nome é obrigatório.'); return }
+    if (!role.trim()) { setErro('Cargo é obrigatório.'); return }
+
+    const cpfDigits = cpf.replace(/\D/g, '')
+    if (cpfDigits && cpfDigits.length !== 11) { setErro('CPF inválido — deve ter 11 dígitos.'); return }
+
+    const num = whatsapp.replace(/\D/g, '')
+    if (num) {
+      if (!num.startsWith('55')) { setErro('WhatsApp deve começar com 55 (código do Brasil). Exemplo: 5511999999999'); return }
+      if (num.length < 12 || num.length > 13) { setErro('WhatsApp inválido. Use o formato: 5511999999999 (com DDD)'); return }
+    }
+
+    onAdicionar({
+      name: name.trim(),
+      full_name: name.trim(),
+      cpf: cpfDigits || undefined,
+      whatsapp_number: num || undefined,
+      role: role.trim(),
+      role_description: roleDesc.trim(),
+      manager_notes: notes.trim(),
+    })
+
+    setName(''); setCpf(''); setWhatsapp(''); setRole(''); setRoleDesc(''); setNotes('')
+  }
+
+  const inputClass = "w-full border border-slate-200 rounded-sm px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white transition-all"
+  const labelClass = "block text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5"
+
+  return (
+    <div className="border border-slate-200 rounded-sm bg-white overflow-hidden shadow-sm">
+      {/* Abas */}
+      <div className="flex border-b border-slate-100">
+        <button
+          type="button"
+          onClick={() => setAba('existente')}
+          className={`flex-1 text-xs font-semibold uppercase tracking-wider py-3 transition-colors ${
+            aba === 'existente'
+              ? 'bg-white text-teal-700 border-b-2 border-teal-500'
+              : 'bg-slate-50 text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          Já cadastrado
+        </button>
+        <button
+          type="button"
+          onClick={() => setAba('novo')}
+          className={`flex-1 text-xs font-semibold uppercase tracking-wider py-3 transition-colors ${
+            aba === 'novo'
+              ? 'bg-white text-teal-700 border-b-2 border-teal-500'
+              : 'bg-slate-50 text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          Novo trabalhador
+        </button>
+      </div>
+
+      {aba === 'existente' ? (
+        <div className="p-4">
+          {carregandoWorkers ? (
+            <p className="text-xs text-slate-400 text-center py-4">Carregando trabalhadores…</p>
+          ) : workersDisponiveis.length === 0 ? (
+            <div className="text-center py-4 space-y-2">
+              <p className="text-xs text-slate-500">Nenhum trabalhador cadastrado ainda.</p>
+              <button
+                type="button"
+                onClick={() => setAba('novo')}
+                className="text-xs text-teal-600 underline underline-offset-2"
+              >
+                Cadastrar novo trabalhador
+              </button>
+            </div>
+          ) : (
+            <ul className="space-y-2 max-h-48 overflow-y-auto">
+              {workersDisponiveis.map(w => {
+                const jaAdicionado = workersJaAdicionados.includes(`__id:${w.id}`)
+                return (
+                  <li key={w.id} className={`flex items-center justify-between gap-3 border rounded-sm px-3 py-2.5 transition-colors ${jaAdicionado ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 hover:bg-slate-50'}`}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">{w.anonymous_alias}</p>
+                      <p className="text-xs text-slate-500">{w.role} · {w.whatsapp_masked}</p>
+                    </div>
+                    {jaAdicionado ? (
+                      <span className="text-[10px] font-semibold text-emerald-600 shrink-0">Adicionado</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => selecionarWorkerExistente(w)}
+                        className="text-[10px] font-semibold uppercase tracking-wider bg-slate-900 text-white px-3 py-1.5 rounded-sm hover:bg-slate-800 shrink-0"
+                      >
+                        Adicionar
+                      </button>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>
+                Nome completo <span className="text-red-400">*</span>
+              </label>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="João da Silva" className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>
+                CPF
+                <span className="text-slate-300 font-normal normal-case tracking-normal ml-1">(para acesso ao portal)</span>
+              </label>
+              <input
+                value={cpf}
+                onChange={e => setCpf(e.target.value)}
+                placeholder="000.000.000-00"
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>
+              WhatsApp
+              <span className="text-slate-300 font-normal normal-case tracking-normal ml-1">(opcional)</span>
+            </label>
+            <input
+              value={whatsapp}
+              onChange={e => setWhatsapp(e.target.value)}
+              placeholder="5511999999999"
+              className={inputClass}
+            />
+            <p className="text-[10px] text-slate-400 mt-1">Com 55 + DDD. Ex: 5511999999999</p>
+          </div>
+
+          <div>
+            <label className={labelClass}>
+              Cargo <span className="text-red-400">*</span>
+            </label>
+            <input value={role} onChange={e => setRole(e.target.value)} placeholder="Ex: Mestre de obras, Supervisor de linha, Operador…" className={inputClass} />
+          </div>
+
+          <div>
+            <label className={labelClass}>
+              Responsabilidades do cargo
+              <span className="text-slate-300 font-normal normal-case tracking-normal ml-1">(opcional, mas melhora as perguntas da IA)</span>
+            </label>
+            <textarea
+              value={roleDesc}
+              onChange={e => setRoleDesc(e.target.value)}
+              placeholder="O que essa pessoa faz no dia a dia?"
+              rows={2}
+              className={`${inputClass} resize-none`}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>
+              Observações para a IA
+              <span className="text-slate-300 font-normal normal-case tracking-normal ml-1">(opcional)</span>
+            </label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="O que você quer que a IA explore com essa pessoa?"
+              rows={2}
+              className={`${inputClass} resize-none`}
+            />
+          </div>
+
+          {erro && (
+            <div className="bg-red-50 border border-red-200 rounded-sm px-3 py-2">
+              <p className="text-xs text-red-700">{erro}</p>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white text-xs font-semibold uppercase tracking-wider py-2.5 rounded-sm hover:bg-slate-800 transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Adicionar participante
+          </button>
+        </form>
+      )}
+    </div>
+  )
+}
+
 // ─── Painel de participantes ──────────────────────────────────────────────────
 
 interface PainelParticipantesProps {
@@ -264,55 +398,130 @@ interface PainelParticipantesProps {
   onRemover: (idx: number) => void
   onCriar: () => void
   criando: boolean
+  onEditarDraft: (titulo: string, descricao: string) => void
 }
 
-function PainelParticipantes({ draft, onAdicionar, onRemover, onCriar, criando }: PainelParticipantesProps) {
+function PainelParticipantes({ draft, onAdicionar, onRemover, onCriar, criando, onEditarDraft }: PainelParticipantesProps) {
+  const whatsappsAdicionados = draft.participantes.map(p => p.whatsapp_number).filter((n): n is string => !!n)
+  const [editandoResumo, setEditandoResumo] = useState(false)
+  const [tituloEdit, setTituloEdit] = useState(draft.titulo ?? '')
+  const [descEdit, setDescEdit] = useState(draft.descricao_problema ?? '')
+
+  function salvarEdicao() {
+    if (!tituloEdit.trim()) return
+    onEditarDraft(tituloEdit.trim(), descEdit.trim())
+    setEditandoResumo(false)
+  }
+
   return (
-    <div className="border-t border-slate-100 bg-slate-50/50 p-5 space-y-4 overflow-y-auto" style={{ maxHeight: '70vh' }}>
-      {/* Resumo */}
-      {draft.titulo && (
-        <div className="bg-white border border-slate-200 rounded-sm px-4 py-3">
-          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5">Investigação definida</p>
-          <p className="text-sm font-semibold text-slate-900">{draft.titulo}</p>
-          {draft.descricao_problema && (
-            <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">{draft.descricao_problema}</p>
-          )}
-        </div>
-      )}
+    <div className="border-t border-slate-100 bg-slate-50/50 flex flex-col" style={{ maxHeight: '75vh' }}>
+      {/* Scroll interno apenas no conteúdo, não esconde o botão de criar */}
+      <div className="overflow-y-auto flex-1 p-5 space-y-4">
+        {/* Resumo da investigação com edição inline */}
+        {draft.titulo && (
+          <div className="bg-white border border-slate-200 rounded-sm px-4 py-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Investigação definida</p>
+              {!editandoResumo && (
+                <button
+                  type="button"
+                  onClick={() => { setTituloEdit(draft.titulo ?? ''); setDescEdit(draft.descricao_problema ?? ''); setEditandoResumo(true) }}
+                  className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 hover:text-teal-600 flex items-center gap-1 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                  </svg>
+                  Editar
+                </button>
+              )}
+            </div>
+            {editandoResumo ? (
+              <div className="space-y-2 mt-1">
+                <input
+                  value={tituloEdit}
+                  onChange={e => setTituloEdit(e.target.value)}
+                  className="w-full border border-slate-200 rounded-sm px-3 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  placeholder="Título da investigação"
+                />
+                <textarea
+                  value={descEdit}
+                  onChange={e => setDescEdit(e.target.value)}
+                  rows={3}
+                  className="w-full border border-slate-200 rounded-sm px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                  placeholder="Descrição do problema"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={salvarEdicao}
+                    disabled={!tituloEdit.trim()}
+                    className="text-[10px] font-semibold uppercase tracking-wider bg-slate-900 text-white px-3 py-1.5 rounded-sm hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditandoResumo(false)}
+                    className="text-[10px] font-semibold uppercase tracking-wider border border-slate-200 text-slate-500 px-3 py-1.5 rounded-sm hover:bg-slate-50"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-slate-900">{draft.titulo}</p>
+                {draft.descricao_problema && (
+                  <p className="text-xs text-slate-500 mt-1 line-clamp-3 leading-relaxed">{draft.descricao_problema}</p>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
-      {/* Lista de participantes */}
-      {draft.participantes.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
-            Participantes ({draft.participantes.length})
+        {/* Lista de participantes adicionados */}
+        {draft.participantes.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
+              Adicionados ({draft.participantes.length})
+            </p>
+            {draft.participantes.map((p, i) => (
+              <CardParticipante key={i} p={p} onRemover={() => onRemover(i)} />
+            ))}
+          </div>
+        )}
+
+        {/* Formulário para adicionar */}
+        <div>
+          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">
+            Adicionar participante
           </p>
-          {draft.participantes.map((p, i) => (
-            <CardParticipante key={i} p={p} onRemover={() => onRemover(i)} />
-          ))}
+          <FormParticipante onAdicionar={onAdicionar} workersJaAdicionados={whatsappsAdicionados} />
         </div>
-      )}
+      </div>
 
-      {/* Formulário */}
-      <FormParticipante onAdicionar={onAdicionar} />
-
-      {/* Botão criar */}
-      {draft.participantes.length > 0 && (
-        <button
-          onClick={onCriar}
-          disabled={criando}
-          className="w-full flex items-center justify-center gap-2 bg-teal-600 text-white text-xs font-semibold uppercase tracking-wider py-3 rounded-sm hover:bg-teal-700 transition-all shadow-sm disabled:opacity-50"
-        >
-          {criando ? (
-            <>
-              <svg className="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Criando investigação…
-            </>
-          ) : `Criar investigação com ${draft.participantes.length} participante${draft.participantes.length !== 1 ? 's' : ''}`}
-        </button>
-      )}
+      {/* Botão criar — sempre visível, fora do scroll */}
+      <div className="shrink-0 px-5 pb-5 pt-3 border-t border-slate-100 bg-slate-50/50">
+        {draft.participantes.length === 0 ? (
+          <p className="text-xs text-slate-400 text-center py-1">Adicione pelo menos um participante para criar a investigação.</p>
+        ) : (
+          <button
+            onClick={onCriar}
+            disabled={criando}
+            className="w-full flex items-center justify-center gap-2 bg-teal-600 text-white text-xs font-semibold uppercase tracking-wider py-3 rounded-sm hover:bg-teal-700 transition-all shadow-sm disabled:opacity-50"
+          >
+            {criando ? (
+              <>
+                <svg className="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Criando investigação…
+              </>
+            ) : `Criar investigação com ${draft.participantes.length} participante${draft.participantes.length !== 1 ? 's' : ''}`}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -406,19 +615,32 @@ export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName
     if (!draft.titulo || !draft.descricao_problema || draft.participantes.length === 0) return
     setCriando(true)
     try {
+      const participantes = draft.participantes.map(p => {
+        // Trabalhadores já cadastrados são referenciados por "__id:uuid"
+        if (p.whatsapp_number?.startsWith('__id:')) {
+          return {
+            worker_id: p.whatsapp_number.replace('__id:', ''),
+            manager_notes: p.manager_notes || undefined,
+          }
+        }
+        return {
+          name: p.name,
+          full_name: p.full_name || undefined,
+          cpf: p.cpf || undefined,
+          role: p.role,
+          role_description: p.role_description || undefined,
+          whatsapp_number: p.whatsapp_number,
+          manager_notes: p.manager_notes || undefined,
+        }
+      })
+
       const res = await fetch('/api/investigations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: draft.titulo,
           problem_description: draft.descricao_problema,
-          participantes: draft.participantes.map(p => ({
-            name: p.name,
-            role: p.role,
-            role_description: p.role_description || undefined,
-            whatsapp_number: p.whatsapp_number,
-            manager_notes: p.manager_notes || undefined,
-          })),
+          participantes,
         }),
       })
       const result = await res.json() as { data?: { id: string }; error?: string }
@@ -459,7 +681,7 @@ export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Steps */}
+          {/* Etapas */}
           <div className="flex items-center gap-2 text-[10px] font-semibold tracking-widest uppercase">
             <span className={`flex items-center gap-1.5 ${draft.fase === 'problema' ? 'text-teal-600' : 'text-slate-400'}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${draft.fase === 'problema' ? 'bg-teal-500' : 'bg-emerald-400'}`} />
@@ -473,7 +695,7 @@ export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName
           </div>
 
           <button
-            onClick={() => router.push('/')}
+            onClick={() => router.push('/investigations')}
             className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-700 border border-slate-200 px-3 py-1.5 rounded-sm transition-colors"
           >
             Cancelar
@@ -496,6 +718,7 @@ export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName
           onRemover={removerParticipante}
           onCriar={() => void criarInvestigacao()}
           criando={criando}
+          onEditarDraft={(titulo, descricao) => setDraft(prev => ({ ...prev, titulo, descricao_problema: descricao }))}
         />
       ) : (
         <div className="border-t border-slate-100 bg-white px-5 py-4 shrink-0">
@@ -505,7 +728,7 @@ export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName
               value={input}
               onChange={e => { setInput(e.target.value); ajustarAltura() }}
               onKeyDown={handleKeyDown}
-              placeholder="Digite sua resposta… (Enter para enviar)"
+              placeholder="Digite sua resposta…"
               rows={1}
               disabled={digitando}
               className="flex-1 resize-none bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:opacity-50"
@@ -523,7 +746,7 @@ export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName
             </button>
           </div>
           <p className="text-center text-[10px] text-slate-300 mt-1.5 font-mono">
-            Enter para enviar · Shift+Enter para nova linha
+            Tecla Enter para enviar · Shift+Enter para nova linha
           </p>
         </div>
       )}

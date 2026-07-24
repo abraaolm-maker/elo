@@ -54,11 +54,13 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
       .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
       .where(eq(schema.investigation_workers.investigation_id, id))
 
-    // Atualizar todos os investigation_workers para 'active'
-    await db
-      .update(schema.investigation_workers)
-      .set({ status: 'active' })
-      .where(eq(schema.investigation_workers.investigation_id, id))
+    // Atualizar todos os investigation_workers para 'active' e gerar access_token
+    for (const iw of iwRows) {
+      await db
+        .update(schema.investigation_workers)
+        .set({ status: 'active', access_token: crypto.randomUUID() })
+        .where(eq(schema.investigation_workers.id, iw.iw_id))
+    }
 
     // Para cada worker: gerar primeira pergunta via IA e enviar via WhatsApp
     const sendFirstQuestion = async (iw: typeof iwRows[number]): Promise<void> => {

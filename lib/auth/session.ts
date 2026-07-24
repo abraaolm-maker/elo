@@ -13,6 +13,7 @@ function getSecret(): Uint8Array {
 export interface SessionPayload {
   managerId: string
   companyId: string
+  isAdmin: boolean
 }
 
 export async function createSession(payload: SessionPayload): Promise<string> {
@@ -33,7 +34,11 @@ export async function verifySession(token: string): Promise<SessionPayload | nul
     ) {
       return null
     }
-    return { managerId: payload.managerId, companyId: payload.companyId }
+    return {
+      managerId: payload.managerId,
+      companyId: payload.companyId,
+      isAdmin: payload.isAdmin === true,
+    }
   } catch {
     return null
   }

@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { INVESTIGATION_ENGINE_SYSTEM_PROMPT } from './prompts'
 import { parseAIJson } from './utils'
+import { logUsage } from './cost-tracker'
 import type { InvestigationEngineInput, InvestigationEngineOutput } from './types'
 
 const VALID_ACTIONS = ['ask_question', 'mark_saturated'] as const
@@ -94,7 +95,21 @@ export async function runInvestigationEngine(
       }
 
       const parsed = parseAIJson<unknown>(firstBlock.text)
-      return validateOutput(parsed)
+      const result = validateOutput(parsed)
+
+      if (response.usage) {
+        logUsage({
+          companyId:       input.companyId ?? '',
+          managerId:       input.managerId,
+          investigationId: input.investigationId,
+          operation:       'investigation_engine',
+          model:           'claude-sonnet-4-6',
+          inputTokens:     response.usage.input_tokens,
+          outputTokens:    response.usage.output_tokens,
+        }).catch(() => {})
+      }
+
+      return result
     } catch (error) {
       lastError = error
       const willRetry = attempt < RETRY_DELAYS.length && isRetryable(error)

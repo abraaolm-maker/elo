@@ -20,6 +20,10 @@ export interface InvestigationEngineInput {
   messageHistory: MessageHistoryEntry[]
   crossValidationContext: string
   managerNotes: string // observações do gestor para este participante nesta investigação
+  // contexto para rastreamento de custos (opcional)
+  companyId?: string
+  managerId?: string
+  investigationId?: string
 }
 
 export interface InvestigationEngineOutput {
@@ -53,6 +57,10 @@ export interface ReportGeneratorInput {
   }
   allMessages: ReportMessageEntry[]
   workerAliases: WorkerAlias[]
+  // contexto para rastreamento de custos (opcional)
+  companyId?: string
+  managerId?: string
+  investigationId?: string
 }
 
 export interface IshikawaBreakdownOutput {

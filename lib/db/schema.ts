@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, unique } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, unique } from 'drizzle-orm/sqlite-core'
 import { sql } from 'drizzle-orm'
 
 // ─── COMPANIES ────────────────────────────────────────────────────────────────
@@ -17,6 +17,7 @@ export const managers = sqliteTable('managers', {
   email:         text('email').notNull().unique(),
   password_hash: text('password_hash').notNull(),
   is_admin:      integer('is_admin', { mode: 'boolean' }).notNull().default(false),
+  is_active:     integer('is_active', { mode: 'boolean' }).notNull().default(true),
   created_at:    text('created_at').notNull().default(sql`(datetime('now'))`),
 })
 
@@ -25,6 +26,8 @@ export const workers = sqliteTable('workers', {
   id:               text('id').primaryKey(),
   company_id:       text('company_id').notNull().references(() => companies.id),
   name:             text('name').notNull(),
+  full_name:        text('full_name'),
+  cpf:              text('cpf'),
   role:             text('role').notNull(),
   role_description: text('role_description'),
   whatsapp_number:  text('whatsapp_number').notNull(),
@@ -50,13 +53,16 @@ export const investigations = sqliteTable('investigations', {
 
 // ─── INVESTIGATION_WORKERS ────────────────────────────────────────────────────
 export const investigation_workers = sqliteTable('investigation_workers', {
-  id:               text('id').primaryKey(),
-  investigation_id: text('investigation_id').notNull().references(() => investigations.id),
-  worker_id:        text('worker_id').notNull().references(() => workers.id),
-  status:           text('status').notNull().default('pending'),
-  saturation_score: integer('saturation_score').notNull().default(0),
-  manager_notes:    text('manager_notes'),
-  created_at:       text('created_at').notNull().default(sql`(datetime('now'))`),
+  id:                text('id').primaryKey(),
+  investigation_id:  text('investigation_id').notNull().references(() => investigations.id),
+  worker_id:         text('worker_id').notNull().references(() => workers.id),
+  status:            text('status').notNull().default('pending'),
+  saturation_score:  integer('saturation_score').notNull().default(0),
+  manager_notes:     text('manager_notes'),
+  access_token:      text('access_token').unique(),
+  push_subscription:  text('push_subscription'),  // JSON string (Web Push)
+  first_accessed_at:  text('first_accessed_at'),  // quando o worker abriu o portal pela primeira vez
+  created_at:        text('created_at').notNull().default(sql`(datetime('now'))`),
 }, t => ({
   uniq_inv_worker: unique().on(t.investigation_id, t.worker_id),
 }))
@@ -113,6 +119,23 @@ export const action_items = sqliteTable('action_items', {
   status:               text('status').notNull().default('suggested'), // 'suggested' | 'in_progress' | 'done' | 'dismissed'
   created_at:           text('created_at').notNull().default(sql`(datetime('now'))`),
 })
+
+// ─── API_USAGE_LOGS ───────────────────────────────────────────────────────────
+export const api_usage_logs = sqliteTable('api_usage_logs', {
+  id:               text('id').primaryKey(),
+  company_id:       text('company_id').notNull().references(() => companies.id),
+  manager_id:       text('manager_id').references(() => managers.id),
+  investigation_id: text('investigation_id').references(() => investigations.id),
+  operation:        text('operation').notNull(),
+  model:            text('model').notNull(),
+  input_tokens:     integer('input_tokens').notNull(),
+  output_tokens:    integer('output_tokens').notNull(),
+  cost_usd:         real('cost_usd').notNull(),
+  cost_brl:         real('cost_brl').notNull(),
+  created_at:       text('created_at').notNull().default(sql`(datetime('now'))`),
+})
+export type ApiUsageLog    = typeof api_usage_logs.$inferSelect
+export type NewApiUsageLog = typeof api_usage_logs.$inferInsert
 
 // ─── Tipos inferidos ──────────────────────────────────────────────────────────
 export type Company                = typeof companies.$inferSelect

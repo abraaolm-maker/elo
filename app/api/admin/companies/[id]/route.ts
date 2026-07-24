@@ -1,43 +1,26 @@
-import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
-import { db, schema } from '@/lib/db'
-import { eq } from 'drizzle-orm'
+import { db, schema } from "@/lib/db"
+import { requireAdmin, isForbiddenError, forbiddenResponse, unauthorizedResponse, isUnauthorizedError } from "@/lib/auth/middleware"
+import { eq, sum } from "drizzle-orm"
 
-async function verificarAdmin(managerId: string): Promise<boolean> {
-  const manager = await db
-    .select({ is_admin: schema.managers.is_admin })
-    .from(schema.managers)
-    .where(eq(schema.managers.id, managerId))
-    .get()
-  return manager?.is_admin === true
-}
-
-interface RouteParams {
-  params: Promise<{ id: string }>
-}
-
-// PATCH /api/admin/companies/[id] — editar nome e plano da empresa
-export async function PATCH(request: Request, { params }: RouteParams): Promise<Response> {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await requireAdmin(request)
     const { id } = await params
-    const session = await requireAuth(request)
-    if (!(await verificarAdmin(session.managerId))) {
-      return Response.json({ error: 'Acesso negado' }, { status: 403 })
-    }
-
-    const body = await request.json() as { name?: string; plan?: string }
-    const updates: Record<string, string> = {}
-    if (body.name?.trim()) updates.name = body.name.trim()
-    if (body.plan) updates.plan = body.plan
-
-    if (Object.keys(updates).length === 0) {
-      return Response.json({ error: 'Nada a atualizar' }, { status: 400 })
-    }
-
-    await db.update(schema.companies).set(updates).where(eq(schema.companies.id, id))
-    return Response.json({ ok: true }, { status: 200 })
+    const company = await db.select().from(schema.companies).where(eq(schema.companies.id, id)).get()
+    if (!company) return Response.json({ error: "Empresa nao encontrada" }, { status: 404 })
+    const managers = await db.select().from(schema.managers).where(eq(schema.managers.company_id, id))
+    const investigations = await db.select().from(schema.investigations).where(eq(schema.investigations.company_id, id))
+    const managersWithCost = await Promise.all(managers.map(async (m) => {
+      const [costRow] = await db.select({ brl: sum(schema.api_usage_logs.cost_brl) }).from(schema.api_usage_logs).where(eq(schema.api_usage_logs.manager_id, m.id))
+      return { id: m.id, name: m.name, email: m.email, is_admin: m.is_admin, is_active: m.is_active, created_at: m.created_at, total_cost_brl: Number(costRow?.brl ?? 0) }
+    }))
+    const [totalCost] = await db.select({ brl: sum(schema.api_usage_logs.cost_brl) }).from(schema.api_usage_logs).where(eq(schema.api_usage_logs.company_id, id))
+    const recentLogs = await db.select().from(schema.api_usage_logs).where(eq(schema.api_usage_logs.company_id, id)).orderBy(schema.api_usage_logs.created_at).limit(50)
+    return Response.json({ data: { company, managers: managersWithCost, investigations, total_cost_brl: Number(totalCost?.brl ?? 0), recent_logs: recentLogs } })
   } catch (error) {
-    if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
-    console.error('[PATCH /api/admin/companies/:id]', error)
-    return Response.json({ error: 'Erro interno' }, { status: 500 })
+    if (isUnauthorizedError(error)) return unauthorizedResponse()
+    if (isForbiddenError(error)) return forbiddenResponse()
+    console.error("[admin/companies/[id] GET]", error)
+    return Response.json({ error: "Erro interno" }, { status: 500 })
   }
 }

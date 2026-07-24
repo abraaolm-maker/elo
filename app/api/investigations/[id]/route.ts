@@ -33,11 +33,13 @@ export async function GET(_request: Request, { params }: RouteParams): Promise<R
         status: schema.investigation_workers.status,
         saturation_score: schema.investigation_workers.saturation_score,
         manager_notes: schema.investigation_workers.manager_notes,
+        access_token: schema.investigation_workers.access_token,
+        first_accessed_at: schema.investigation_workers.first_accessed_at,
         alias: schema.workers.anonymous_alias,
         name: schema.workers.name,
         role: schema.workers.role,
         role_description: schema.workers.role_description,
-        // whatsapp_number NUNCA exposto via API do dashboard
+        // whatsapp_number e cpf NUNCA expostos via API do dashboard
       })
       .from(schema.investigation_workers)
       .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
@@ -89,6 +91,14 @@ export async function PATCH(request: Request, { params }: RouteParams): Promise<
     }
 
     const body = await request.json() as Record<string, unknown>
+
+    // Cancelar investigação
+    if (body.action === 'cancel') {
+      await db.update(schema.investigations)
+        .set({ status: 'cancelled' })
+        .where(eq(schema.investigations.id, id))
+      return Response.json({ ok: true }, { status: 200 })
+    }
 
     // pending: pode editar título e descrição
     if (investigation.status === 'pending') {

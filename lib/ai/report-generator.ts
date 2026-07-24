@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { REPORT_GENERATOR_SYSTEM_PROMPT } from './prompts'
 import { parseAIJson } from './utils'
+import { logUsage } from './cost-tracker'
 import type { ReportGeneratorInput, ReportGeneratorOutput, IshikawaBreakdownOutput, ActionPlanItemOutput } from './types'
 
 const ISHIKAWA_KEYS = [
@@ -118,7 +119,7 @@ async function callClaude(
 ): Promise<Anthropic.Message> {
   return client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
+    max_tokens: 8192,
     system: REPORT_GENERATOR_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: JSON.stringify(input) }],
   })
@@ -140,7 +141,21 @@ export async function generateReport(
       }
 
       const parsed = parseAIJson<unknown>(firstBlock.text)
-      return validateOutput(parsed)
+      const result = validateOutput(parsed)
+
+      if (response.usage) {
+        logUsage({
+          companyId:       input.companyId ?? '',
+          managerId:       input.managerId,
+          investigationId: input.investigationId,
+          operation:       'report_generator',
+          model:           'claude-sonnet-4-6',
+          inputTokens:     response.usage.input_tokens,
+          outputTokens:    response.usage.output_tokens,
+        }).catch(() => {})
+      }
+
+      return result
     } catch (error) {
       lastError = error
       const willRetry = attempt < RETRY_DELAYS.length && isRetryable(error)

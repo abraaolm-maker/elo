@@ -35,12 +35,13 @@ export async function POST(request: NextRequest) {
     const token = await createSession({
       managerId: manager.id,
       companyId: manager.company_id,
+      isAdmin: manager.is_admin ?? false,
     })
 
     const cookieStore = await cookies()
     cookieStore.set(sessionCookieOptions(token))
 
-    return Response.json({ ok: true })
+    return Response.json({ ok: true, isAdmin: manager.is_admin ?? false })
   } catch (error) {
     console.error('[auth/login]', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
