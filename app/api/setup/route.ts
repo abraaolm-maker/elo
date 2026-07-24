@@ -18,14 +18,15 @@ async function runSafe(sqlStr: string, label: string): Promise<string> {
 }
 
 export async function GET(request: Request) {
-  const secret = process.env.SETUP_SECRET
+  const secret = (process.env.SETUP_SECRET ?? '').trim()
   if (!secret) {
     return Response.json({ error: 'Setup desabilitado' }, { status: 403 })
   }
 
   const url = new URL(request.url)
-  if (url.searchParams.get('secret') !== secret) {
-    return Response.json({ error: 'Secret inválido' }, { status: 401 })
+  const provided = (url.searchParams.get('secret') ?? '').trim()
+  if (provided !== secret) {
+    return Response.json({ error: 'Secret inválido', provided_len: provided.length, stored_len: secret.length }, { status: 401 })
   }
 
   const results: string[] = []
