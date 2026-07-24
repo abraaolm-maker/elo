@@ -88,7 +88,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     if (isUnauthorizedError(error)) return unauthorizedResponse()
     if (isForbiddenError(error)) return forbiddenResponse()
-    console.error('[admin/investigations/reprocess]', error)
-    return Response.json({ error: 'Erro interno ao gerar relatório' }, { status: 500 })
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('[admin/investigations/reprocess]', msg, error)
+    return Response.json({ error: msg }, { status: 500 })
   }
 }

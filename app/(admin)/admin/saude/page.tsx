@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 
 interface StuckInv { id: string; title: string; status: string; company_name: string; created_at: string; cost_brl: number }
 
@@ -17,13 +16,14 @@ export default function AdminSaudePage() {
   const [stuck, setStuck] = useState<StuckInv[]>([])
   const [loading, setLoading] = useState(true)
   const [reprocessing, setReprocessing] = useState<string | null>(null)
-  const [messages, setMessages] = useState<Record<string, string>>({})
+  const [errorModal, setErrorModal] = useState<string | null>(null)
+  const [successId, setSuccessId] = useState<string | null>(null)
 
   function load() {
     setLoading(true)
     fetch('/api/admin/investigations?status=saturated')
       .then(r => r.json() as Promise<{ data: StuckInv[] }>)
-      .then(j => setStuck(j.data))
+      .then(j => setStuck(j.data ?? []))
       .catch(console.error)
       .finally(() => setLoading(false))
   }
@@ -32,23 +32,42 @@ export default function AdminSaudePage() {
 
   async function reprocess(id: string) {
     setReprocessing(id)
-    setMessages(m => ({ ...m, [id]: '' }))
+    setSuccessId(null)
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 58_000)
     try {
-      const res = await fetch(`/api/admin/investigations/${id}/reprocess`, { method: 'POST', signal: controller.signal })
+      const res = await fetch(`/api/admin/investigations/${id}/reprocess`, {
+        method: 'POST',
+        signal: controller.signal,
+      })
       clearTimeout(timeout)
       if (res.ok) {
-        setMessages(m => ({ ...m, [id]: 'Relatório gerado com sucesso!' }))
-        setTimeout(() => load(), 800)
+        setSuccessId(id)
+        setTimeout(() => load(), 1000)
       } else {
-        const j = await res.json() as { error?: string }
-        setMessages(m => ({ ...m, [id]: j.error ?? 'Erro ao reprocessar' }))
+        let detail = `HTTP ${res.status}`
+        try {
+          const j = await res.json() as { error?: string; detail?: string }
+          detail = j.error ?? j.detail ?? detail
+        } catch { /* body não é JSON */ }
+        setErrorModal(`Erro ao reprocessar relatório (${res.status}):\n\n${detail}`)
       }
     } catch (err) {
       clearTimeout(timeout)
-      const isTimeout = err instanceof Error && err.name === 'AbortError'
-      setMessages(m => ({ ...m, [id]: isTimeout ? 'Tempo esgotado — plano Vercel Hobby tem limite de 10s. Atualize para Pro ou tente novamente.' : 'Erro de conexão' }))
+      if (err instanceof Error && err.name === 'AbortError') {
+        setErrorModal(
+          'Tempo esgotado (58s).\n\nPossíveis causas:\n' +
+          '• Plano Vercel Hobby tem limite de 10s — atualize para Pro.\n' +
+          '• A chave ANTHROPIC_API_KEY pode estar com BOM ou inválida.\n' +
+          '• O Claude API pode estar fora do ar.\n\n' +
+          'Verifique os logs do Vercel em: vercel.com → projeto → Deployments → Functions.'
+        )
+      } else {
+        setErrorModal(
+          `Erro de rede inesperado:\n${err instanceof Error ? err.message : String(err)}\n\n` +
+          'Verifique os logs do Vercel.'
+        )
+      }
     } finally {
       setReprocessing(null)
     }
@@ -98,20 +117,17 @@ export default function AdminSaudePage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-500">{inv.created_at.slice(0, 10)}</td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center gap-3 justify-end">
-                        {messages[inv.id] && (
-                          <span className={`text-xs ${messages[inv.id].includes('sucesso') ? 'text-green-600' : 'text-red-500'}`}>
-                            {messages[inv.id]}
-                          </span>
-                        )}
+                      {successId === inv.id ? (
+                        <span className="text-xs text-green-600 font-medium">Relatório gerado!</span>
+                      ) : (
                         <button
                           onClick={() => reprocess(inv.id)}
                           disabled={reprocessing === inv.id}
                           className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-sm hover:bg-teal-700 transition-colors disabled:opacity-50"
                         >
-                          {reprocessing === inv.id ? 'Gerando...' : 'Reprocessar relatório'}
+                          {reprocessing === inv.id ? 'Gerando…' : 'Reprocessar relatório'}
                         </button>
-                      </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -119,6 +135,26 @@ export default function AdminSaudePage() {
             </table>
           </div>
         </>
+      )}
+
+      {/* Modal de erro */}
+      {errorModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-md shadow-xl max-w-lg w-full p-6">
+            <h2 className="text-base font-semibold text-red-700 mb-3">Erro ao gerar relatório</h2>
+            <pre className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded p-3 whitespace-pre-wrap max-h-72 overflow-y-auto font-mono">
+              {errorModal}
+            </pre>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setErrorModal(null)}
+                className="text-sm bg-slate-800 text-white px-4 py-2 rounded-sm hover:bg-slate-700"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
