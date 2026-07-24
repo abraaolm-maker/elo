@@ -185,12 +185,16 @@ export async function GET(request: Request) {
   results.push(await runSafe(`ALTER TABLE workers ADD COLUMN cpf TEXT`, 'workers.cpf'))
   results.push(await runSafe(`ALTER TABLE workers ADD COLUMN role_description TEXT`, 'workers.role_description'))
 
+  // Colunas em investigations
+  results.push(await runSafe(`ALTER TABLE investigations ADD COLUMN investigation_context TEXT`, 'investigations.investigation_context'))
+
   // Colunas em investigation_workers
   results.push(await runSafe(`ALTER TABLE investigation_workers ADD COLUMN manager_notes TEXT`, 'iw.manager_notes'))
   results.push(await runSafe(`ALTER TABLE investigation_workers ADD COLUMN access_token TEXT`, 'iw.access_token'))
   results.push(await runSafe(`ALTER TABLE investigation_workers ADD COLUMN push_subscription TEXT`, 'iw.push_subscription'))
   results.push(await runSafe(`ALTER TABLE investigation_workers ADD COLUMN first_accessed_at TEXT`, 'iw.first_accessed_at'))
   results.push(await runSafe(`ALTER TABLE investigation_workers ADD COLUMN saturation_score INTEGER NOT NULL DEFAULT 0`, 'iw.saturation_score'))
+  results.push(await runSafe(`ALTER TABLE investigation_workers ADD COLUMN pending_hints TEXT`, 'iw.pending_hints'))
 
   // Index único para access_token
   results.push(await runSafe(`CREATE UNIQUE INDEX IF NOT EXISTS idx_iw_access_token ON investigation_workers(access_token)`, 'index access_token'))

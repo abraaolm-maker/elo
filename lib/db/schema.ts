@@ -45,10 +45,11 @@ export const investigations = sqliteTable('investigations', {
   manager_id:          text('manager_id').notNull().references(() => managers.id),
   title:               text('title').notNull(),
   problem_description: text('problem_description').notNull(),
-  ishikawa_category:   text('ishikawa_category'),
-  status:              text('status').notNull().default('pending'),
-  created_at:          text('created_at').notNull().default(sql`(datetime('now'))`),
-  completed_at:        text('completed_at'),
+  ishikawa_category:    text('ishikawa_category'),
+  status:               text('status').notNull().default('pending'),
+  investigation_context: text('investigation_context'), // JSON: domínio, persona, categorias, linguagem
+  created_at:           text('created_at').notNull().default(sql`(datetime('now'))`),
+  completed_at:         text('completed_at'),
 })
 
 // ─── INVESTIGATION_WORKERS ────────────────────────────────────────────────────
@@ -60,8 +61,9 @@ export const investigation_workers = sqliteTable('investigation_workers', {
   saturation_score:  integer('saturation_score').notNull().default(0),
   manager_notes:     text('manager_notes'),
   access_token:      text('access_token').unique(),
-  push_subscription:  text('push_subscription'),  // JSON string (Web Push)
-  first_accessed_at:  text('first_accessed_at'),  // quando o worker abriu o portal pela primeira vez
+  push_subscription:  text('push_subscription'),
+  first_accessed_at:  text('first_accessed_at'),
+  pending_hints:      text('pending_hints'),       // JSON: cross_validation_hints da última resposta deste worker
   created_at:        text('created_at').notNull().default(sql`(datetime('now'))`),
 }, t => ({
   uniq_inv_worker: unique().on(t.investigation_id, t.worker_id),

@@ -13,14 +13,24 @@ export interface MessageHistoryEntry {
   content: string
 }
 
+export interface InvestigationContext {
+  domain: string
+  investigator_persona: string
+  relevant_ishikawa_categories: string[]
+  language_guidelines: Record<string, string>
+  domain_specific_probes: string[]
+}
+
 export interface InvestigationEngineInput {
   problemDescription: string
   workerRole: string
   workerRoleDescription: string
   messageHistory: MessageHistoryEntry[]
-  crossValidationContext: string
-  managerNotes: string // observações do gestor para este participante nesta investigação
-  // contexto para rastreamento de custos (opcional)
+  reportedFacts: string[]       // key_points já extraídos de outros workers (o que foi dito)
+  pendingValidations: string[]  // hints gerados por outros workers (o que precisa ser confirmado)
+  managerNotes: string
+  investigationContext?: InvestigationContext | null
+  // rastreamento de custos
   companyId?: string
   managerId?: string
   investigationId?: string

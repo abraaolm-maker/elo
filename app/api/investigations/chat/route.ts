@@ -214,6 +214,24 @@ export async function POST(request: Request): Promise<Response> {
     if (prontoAgora && draftComUpdates.titulo && draftComUpdates.descricao_problema && draftComUpdates.participantes.length > 0) {
       investigationId = crypto.randomUUID()
 
+      // Gerar investigation_context com base no problema e nos cargos dos participantes
+      let investigationContextJson: string | null = null
+      try {
+        const { generateInvestigationContext } = await import('@/lib/ai/context-generator')
+        const workerRoles = draftComUpdates.participantes.map(p => ({
+          role: p.role,
+          role_description: p.role_description,
+        }))
+        const ctx = await generateInvestigationContext(
+          draftComUpdates.descricao_problema,
+          workerRoles,
+          { companyId: session.companyId, managerId: session.managerId, investigationId }
+        )
+        investigationContextJson = JSON.stringify(ctx)
+      } catch (err) {
+        console.error('[chat] context-generator falhou (não bloqueia criação)', err)
+      }
+
       await db.insert(schema.investigations).values({
         id: investigationId,
         company_id: session.companyId,
@@ -221,6 +239,7 @@ export async function POST(request: Request): Promise<Response> {
         title: draftComUpdates.titulo,
         problem_description: draftComUpdates.descricao_problema,
         status: 'pending',
+        investigation_context: investigationContextJson,
       })
 
       for (const p of draftComUpdates.participantes) {

@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { env } from '@/lib/utils/env'
-import { INVESTIGATION_ENGINE_SYSTEM_PROMPT } from './prompts'
+import { buildInvestigationEnginePrompt } from './prompts'
 import { parseAIJson } from './utils'
 import { logUsage } from './cost-tracker'
 import type { InvestigationEngineInput, InvestigationEngineOutput } from './types'
@@ -72,11 +72,14 @@ async function callClaude(
   client: Anthropic,
   input: InvestigationEngineInput
 ): Promise<Anthropic.Message> {
+  const systemPrompt = buildInvestigationEnginePrompt(input.investigationContext)
+  // Não enviar investigationContext no payload ao Claude (já está no system prompt)
+  const { investigationContext: _ctx, ...payload } = input
   return client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 1024,
-    system: INVESTIGATION_ENGINE_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: JSON.stringify(input) }],
+    system: systemPrompt,
+    messages: [{ role: 'user', content: JSON.stringify(payload) }],
   })
 }
 

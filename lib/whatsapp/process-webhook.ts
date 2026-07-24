@@ -6,7 +6,7 @@ import { sendTelegramMessage } from '@/lib/telegram/sender'
 import { downloadAudio, uploadAudioToStorage, transcribeAudio } from '@/lib/audio/transcriber'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import { generateReport } from '@/lib/ai/report-generator'
-import type { MessageHistoryEntry, ReportMessageEntry, WorkerAlias } from '@/lib/ai/types'
+import type { MessageHistoryEntry, ReportMessageEntry, WorkerAlias, InvestigationContext } from '@/lib/ai/types'
 import crypto from 'crypto'
 
 // ─── Lógica central — aceita payload bruto do Meta WhatsApp ──────────────────
@@ -178,7 +178,7 @@ export async function processInboundMessage({
 
   if (!messageContent) return
 
-  // ── Construir crossValidationContext ────────────────────────────────────────
+  // ── Construir reportedFacts (key_points de outros workers) ──────────────────
   const otherMessages = await db
     .select({ key_points_extracted: schema.messages.key_points_extracted })
     .from(schema.messages)
@@ -191,15 +191,24 @@ export async function processInboundMessage({
       )
     )
 
-  const crossValidationContext = otherMessages
+  const reportedFacts = otherMessages
     .flatMap(m => {
-      try {
-        return (JSON.parse(m.key_points_extracted ?? '[]') as string[])
-      } catch {
-        return []
-      }
+      try { return (JSON.parse(m.key_points_extracted ?? '[]') as string[]) } catch { return [] }
     })
-    .join('; ')
+
+  // ── Construir pendingValidations (hints de outros workers) ──────────────────
+  const otherIwRows = await db
+    .select({ pending_hints: schema.investigation_workers.pending_hints })
+    .from(schema.investigation_workers)
+    .where(
+      and(
+        eq(schema.investigation_workers.investigation_id, iw.investigation_id),
+        ne(schema.investigation_workers.worker_id, worker.id),
+      )
+    )
+
+  const pendingValidations = otherIwRows
+    .flatMap(w => { try { return JSON.parse(w.pending_hints ?? '[]') as string[] } catch { return [] } })
 
   // ── Buscar histórico de mensagens deste worker ───────────────────────────────
   const rawHistory = await db
@@ -220,9 +229,12 @@ export async function processInboundMessage({
       content: m.content as string,
     }))
 
-  // ── Chamar o engine de investigação ─────────────────────────────────────────
-  // manager_notes: observações do gestor para este participante nesta investigação
-  // A IA incorpora nas próximas perguntas sem atribuir ao gestor
+  // ── Parsear investigation_context ────────────────────────────────────────────
+  let investigationContext: InvestigationContext | null = null
+  if (investigation.investigation_context) {
+    try { investigationContext = JSON.parse(investigation.investigation_context) as InvestigationContext } catch { /* usa null */ }
+  }
+
   const managerNotes = iw.manager_notes ?? ''
 
   let engineOutput
@@ -232,8 +244,10 @@ export async function processInboundMessage({
       workerRole: worker.role,
       workerRoleDescription: worker.role_description ?? '',
       messageHistory,
-      crossValidationContext,
+      reportedFacts,
+      pendingValidations,
       managerNotes,
+      investigationContext,
     })
   } catch (error) {
     console.error('[process-webhook] investigation engine error', error)
@@ -247,10 +261,14 @@ export async function processInboundMessage({
       .set({ key_points_extracted: JSON.stringify(engineOutput.key_points_extracted) })
       .where(eq(schema.messages.id, savedMessageId))
 
-    // Atualizar saturation_score
+    // Salvar pending_hints para que outros workers recebam como pendingValidations
+    const hints = engineOutput.cross_validation_hints
     await db
       .update(schema.investigation_workers)
-      .set({ saturation_score: engineOutput.saturation_score })
+      .set({
+        saturation_score: engineOutput.saturation_score,
+        ...(hints.length > 0 ? { pending_hints: JSON.stringify(hints) } : {}),
+      })
       .where(eq(schema.investigation_workers.id, iw.id))
 
     // Salvar pergunta de saída no banco
@@ -283,9 +301,14 @@ export async function processInboundMessage({
       .set({ key_points_extracted: JSON.stringify(engineOutput.key_points_extracted) })
       .where(eq(schema.messages.id, savedMessageId))
 
+    const hintsSat = engineOutput.cross_validation_hints
     await db
       .update(schema.investigation_workers)
-      .set({ status: 'saturated', saturation_score: engineOutput.saturation_score })
+      .set({
+        status: 'saturated',
+        saturation_score: engineOutput.saturation_score,
+        ...(hintsSat.length > 0 ? { pending_hints: JSON.stringify(hintsSat) } : {}),
+      })
       .where(eq(schema.investigation_workers.id, iw.id))
 
     // Verificar se TODOS os workers desta investigação estão saturados ou unresponsive

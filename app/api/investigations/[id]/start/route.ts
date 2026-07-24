@@ -6,6 +6,7 @@ import { eq, and } from 'drizzle-orm'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/sender'
 import crypto from 'crypto'
+import type { InvestigationContext } from '@/lib/ai/types'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -18,7 +19,15 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
 
     // Buscar investigação e validar que pertence à company
     const investigation = await db
-      .select()
+      .select({
+        id: schema.investigations.id,
+        company_id: schema.investigations.company_id,
+        manager_id: schema.investigations.manager_id,
+        title: schema.investigations.title,
+        problem_description: schema.investigations.problem_description,
+        status: schema.investigations.status,
+        investigation_context: schema.investigations.investigation_context,
+      })
       .from(schema.investigations)
       .where(
         and(
@@ -64,6 +73,12 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
         .where(eq(schema.investigation_workers.id, iw.iw_id))
     }
 
+    // Parsear investigation_context uma vez para todos os workers
+    let investigationContext: InvestigationContext | null = null
+    if (investigation.investigation_context) {
+      try { investigationContext = JSON.parse(investigation.investigation_context) as InvestigationContext } catch { /* usa null */ }
+    }
+
     // Para cada worker: gerar primeira pergunta via IA e enviar via WhatsApp
     const sendFirstQuestion = async (iw: typeof iwRows[number]): Promise<void> => {
       let engineOutput
@@ -73,8 +88,10 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
           workerRole: iw.role,
           workerRoleDescription: iw.role_description ?? '',
           messageHistory: [],
-          crossValidationContext: '',
+          reportedFacts: [],
+          pendingValidations: [],
           managerNotes: iw.manager_notes ?? '',
+          investigationContext,
           companyId: investigation.company_id,
           managerId: investigation.manager_id,
           investigationId: id,

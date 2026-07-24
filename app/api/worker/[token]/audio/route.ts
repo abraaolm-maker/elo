@@ -7,6 +7,7 @@ import crypto from 'crypto'
 import OpenAI from 'openai'
 import { toFile } from 'openai/uploads'
 import { env } from '@/lib/utils/env'
+import type { InvestigationContext } from '@/lib/ai/types'
 
 interface RouteParams { params: Promise<{ token: string }> }
 
@@ -28,6 +29,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       manager_notes: schema.investigation_workers.manager_notes,
       investigation_status: schema.investigations.status,
       problem_description: schema.investigations.problem_description,
+      investigation_context: schema.investigations.investigation_context,
       company_id: schema.investigations.company_id,
       manager_id: schema.investigations.manager_id,
       worker_cpf: schema.workers.cpf,
@@ -88,7 +90,8 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .orderBy(schema.messages.created_at)
     .all()
 
-  const otherPoints = await db
+  // reportedFacts: key_points de outros workers
+  const otherMessages = await db
     .select({ key_points_extracted: schema.messages.key_points_extracted })
     .from(schema.messages)
     .where(and(
@@ -98,21 +101,47 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     ))
     .all()
 
-  const crossValidationContext = otherPoints
+  const reportedFacts = otherMessages
     .flatMap(m => { try { return JSON.parse(m.key_points_extracted ?? '[]') as string[] } catch { return [] } })
-    .join('; ')
+
+  // pendingValidations: hints gerados por outros workers
+  const otherWorkers = await db
+    .select({ pending_hints: schema.investigation_workers.pending_hints })
+    .from(schema.investigation_workers)
+    .where(and(
+      eq(schema.investigation_workers.investigation_id, iw.investigation_id),
+      ne(schema.investigation_workers.worker_id, iw.worker_id),
+    ))
+    .all()
+
+  const pendingValidations = otherWorkers
+    .flatMap(w => { try { return JSON.parse(w.pending_hints ?? '[]') as string[] } catch { return [] } })
+
+  let investigationContext: InvestigationContext | null = null
+  if (iw.investigation_context) {
+    try { investigationContext = JSON.parse(iw.investigation_context) as InvestigationContext } catch { /* usa null */ }
+  }
 
   const engineOutput = await runInvestigationEngine({
     problemDescription: iw.problem_description,
     workerRole: iw.worker_role,
     workerRoleDescription: iw.worker_role_description ?? '',
     messageHistory: allMessages.filter(m => m.content !== null) as { direction: 'outbound' | 'inbound'; content: string }[],
-    crossValidationContext,
+    reportedFacts,
+    pendingValidations,
     managerNotes: iw.manager_notes ?? '',
+    investigationContext,
     companyId: iw.company_id,
     managerId: iw.manager_id,
     investigationId: iw.investigation_id,
   })
+
+  // Salvar pending_hints para que outros workers recebam como pendingValidations
+  if (engineOutput.cross_validation_hints.length > 0) {
+    await db.update(schema.investigation_workers)
+      .set({ pending_hints: JSON.stringify(engineOutput.cross_validation_hints) })
+      .where(eq(schema.investigation_workers.id, iw.iw_id))
+  }
 
   await db.update(schema.investigation_workers)
     .set({ saturation_score: engineOutput.saturation_score })

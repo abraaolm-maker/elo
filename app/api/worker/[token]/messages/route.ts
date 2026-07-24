@@ -4,6 +4,7 @@ import { db, schema } from '@/lib/db'
 import { eq, and, ne } from 'drizzle-orm'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import crypto from 'crypto'
+import type { InvestigationContext } from '@/lib/ai/types'
 
 interface RouteParams { params: Promise<{ token: string }> }
 
@@ -27,6 +28,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       manager_notes: schema.investigation_workers.manager_notes,
       investigation_status: schema.investigations.status,
       problem_description: schema.investigations.problem_description,
+      investigation_context: schema.investigations.investigation_context,
       company_id: schema.investigations.company_id,
       manager_id: schema.investigations.manager_id,
       worker_cpf: schema.workers.cpf,
@@ -56,7 +58,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     retry_count: 0,
   })
 
-  // Buscar histórico completo para o engine
+  // Histórico deste worker
   const allMessages = await db
     .select({ direction: schema.messages.direction, content: schema.messages.content })
     .from(schema.messages)
@@ -67,8 +69,8 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .orderBy(schema.messages.created_at)
     .all()
 
-  // Cross-validation: key_points apenas de OUTROS workers (não do atual)
-  const otherPoints = await db
+  // Cross-validation — fatos relatados por OUTROS workers (key_points das mensagens)
+  const otherMessages = await db
     .select({ key_points_extracted: schema.messages.key_points_extracted })
     .from(schema.messages)
     .where(and(
@@ -78,11 +80,27 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     ))
     .all()
 
-  const crossValidationContext = otherPoints
-    .flatMap(m => {
-      try { return JSON.parse(m.key_points_extracted ?? '[]') as string[] } catch { return [] }
-    })
-    .join('; ')
+  const reportedFacts = otherMessages
+    .flatMap(m => { try { return JSON.parse(m.key_points_extracted ?? '[]') as string[] } catch { return [] } })
+
+  // Cross-validation — validações pendentes geradas por OUTROS workers (pending_hints)
+  const otherWorkers = await db
+    .select({ pending_hints: schema.investigation_workers.pending_hints })
+    .from(schema.investigation_workers)
+    .where(and(
+      eq(schema.investigation_workers.investigation_id, iw.investigation_id),
+      ne(schema.investigation_workers.worker_id, iw.worker_id),
+    ))
+    .all()
+
+  const pendingValidations = otherWorkers
+    .flatMap(w => { try { return JSON.parse(w.pending_hints ?? '[]') as string[] } catch { return [] } })
+
+  // Parsear investigation_context
+  let investigationContext: InvestigationContext | null = null
+  if (iw.investigation_context) {
+    try { investigationContext = JSON.parse(iw.investigation_context) as InvestigationContext } catch { /* usa null */ }
+  }
 
   // Rodar engine
   const engineOutput = await runInvestigationEngine({
@@ -90,8 +108,10 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     workerRole: iw.worker_role,
     workerRoleDescription: iw.worker_role_description ?? '',
     messageHistory: allMessages.filter(m => m.content !== null) as { direction: 'outbound' | 'inbound'; content: string }[],
-    crossValidationContext,
+    reportedFacts,
+    pendingValidations,
     managerNotes: iw.manager_notes ?? '',
+    investigationContext,
     companyId: iw.company_id,
     managerId: iw.manager_id,
     investigationId: iw.investigation_id,
@@ -115,6 +135,13 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       .where(eq(schema.messages.id, lastId))
   }
 
+  // Salvar pending_hints deste worker para que outros workers os recebam como pendingValidations
+  if (engineOutput.cross_validation_hints.length > 0) {
+    await db.update(schema.investigation_workers)
+      .set({ pending_hints: JSON.stringify(engineOutput.cross_validation_hints) })
+      .where(eq(schema.investigation_workers.id, iw.iw_id))
+  }
+
   // Atualizar saturation_score
   await db.update(schema.investigation_workers)
     .set({ saturation_score: engineOutput.saturation_score })
@@ -129,7 +156,6 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
 
     outboundContent = 'Obrigado pela sua participação! Suas respostas foram registradas com sucesso. Você pode fechar esta página.'
 
-    // Verificar se todos saturaram → gerar relatório (aguardar para não ser cortado pelo Vercel)
     await checkAndGenerateReport(iw.investigation_id).catch(err => console.error('[worker-portal] report gen error', err))
   } else {
     outboundContent = engineOutput.next_question ?? null
@@ -257,8 +283,6 @@ async function checkAndGenerateReport(investigationId: string) {
     }
   } catch (err) {
     console.error('[worker-portal] report gen error', err)
-    // Mesmo com falha no relatório, marca como completed para não travar em saturated
-    // O relatório pode ser regenerado via /api/reports/[id]
   }
 
   await db.update(schema.investigations)
