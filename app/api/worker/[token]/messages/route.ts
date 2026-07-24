@@ -127,8 +127,8 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
 
     outboundContent = 'Obrigado pela sua participação! Suas respostas foram registradas com sucesso. Você pode fechar esta página.'
 
-    // Verificar se todos saturaram → gerar relatório (assíncrono)
-    checkAndGenerateReport(iw.investigation_id).catch(err => console.error('[worker-portal] report gen error', err))
+    // Verificar se todos saturaram → gerar relatório (aguardar para não ser cortado pelo Vercel)
+    await checkAndGenerateReport(iw.investigation_id).catch(err => console.error('[worker-portal] report gen error', err))
   } else {
     outboundContent = engineOutput.next_question ?? null
   }

@@ -122,6 +122,9 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       .set({ status: 'saturated' })
       .where(eq(schema.investigation_workers.id, iw.iw_id))
     outboundContent = 'Obrigado pela sua participação! Suas respostas foram registradas com sucesso. Você pode fechar esta página.'
+
+    // Verificar se todos saturaram → gerar relatório (aguardar para não ser cortado pelo Vercel)
+    await checkAndGenerateReport(iw.investigation_id).catch(err => console.error('[worker-audio] report gen error', err))
   } else {
     outboundContent = engineOutput.next_question ?? ''
   }
@@ -146,4 +149,101 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       status: engineOutput.action === 'mark_saturated' ? 'saturated' : iw.status,
     }
   }, { status: 200 })
+}
+
+async function checkAndGenerateReport(investigationId: string) {
+  const workers = await db
+    .select({ status: schema.investigation_workers.status })
+    .from(schema.investigation_workers)
+    .where(eq(schema.investigation_workers.investigation_id, investigationId))
+    .all()
+
+  const allDone = workers.every(w => w.status === 'saturated' || w.status === 'unresponsive')
+  if (!allDone) return
+
+  await db.update(schema.investigations)
+    .set({ status: 'saturated' })
+    .where(eq(schema.investigations.id, investigationId))
+
+  const investigation = await db
+    .select({ title: schema.investigations.title, problem_description: schema.investigations.problem_description })
+    .from(schema.investigations)
+    .where(eq(schema.investigations.id, investigationId))
+    .get()
+
+  if (!investigation) return
+
+  const iwRows = await db
+    .select({
+      worker_id: schema.investigation_workers.worker_id,
+      alias: schema.workers.anonymous_alias,
+      role: schema.workers.role,
+    })
+    .from(schema.investigation_workers)
+    .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
+    .where(eq(schema.investigation_workers.investigation_id, investigationId))
+    .all()
+
+  const workerMap = new Map(iwRows.map(w => [w.worker_id, { alias: w.alias, role: w.role }]))
+
+  const rawMessages = await db
+    .select({
+      worker_id: schema.messages.worker_id,
+      direction: schema.messages.direction,
+      content: schema.messages.content,
+      key_points_extracted: schema.messages.key_points_extracted,
+    })
+    .from(schema.messages)
+    .where(eq(schema.messages.investigation_id, investigationId))
+    .orderBy(schema.messages.created_at)
+    .all()
+
+  const allMessages = rawMessages
+    .filter(m => m.content !== null)
+    .map(m => {
+      const wInfo = workerMap.get(m.worker_id) ?? { alias: 'Desconhecido', role: '' }
+      return {
+        alias: wInfo.alias,
+        role: wInfo.role,
+        direction: m.direction as 'outbound' | 'inbound',
+        content: m.content!,
+        key_points_extracted: Array.isArray(m.key_points_extracted) ? (m.key_points_extracted as string[]) : undefined,
+      }
+    })
+
+  const workerAliases = Array.from(workerMap.values())
+
+  try {
+    const { generateReport } = await import('@/lib/ai/report-generator')
+    const reportOutput = await generateReport({ investigation, allMessages, workerAliases })
+
+    const reportValues = {
+      investigation_id: investigationId,
+      root_cause: reportOutput.root_cause,
+      confidence_score: reportOutput.confidence_score,
+      confidence_justification: reportOutput.confidence_justification ?? null,
+      ishikawa_breakdown: JSON.stringify(reportOutput.ishikawa_breakdown),
+      sources_summary: JSON.stringify(reportOutput.sources_summary),
+      recommendations: JSON.stringify(reportOutput.recommendations),
+      generated_at: new Date().toISOString(),
+    }
+
+    const existingReport = await db
+      .select({ id: schema.reports.id })
+      .from(schema.reports)
+      .where(eq(schema.reports.investigation_id, investigationId))
+      .get()
+
+    if (existingReport) {
+      await db.update(schema.reports).set(reportValues).where(eq(schema.reports.investigation_id, investigationId))
+    } else {
+      await db.insert(schema.reports).values({ id: crypto.randomUUID(), ...reportValues })
+    }
+  } catch (err) {
+    console.error('[worker-audio] report gen error', err)
+  }
+
+  await db.update(schema.investigations)
+    .set({ status: 'completed', completed_at: new Date().toISOString() })
+    .where(eq(schema.investigations.id, investigationId))
 }
