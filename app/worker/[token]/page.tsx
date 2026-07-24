@@ -26,8 +26,8 @@ export default function WorkerPortal() {
   const { token } = useParams<{ token: string }>()
 
   const [phase, setPhase] = useState<Phase>('loading')
-  const [investigationTitle, setInvestigationTitle] = useState('')
   const [companyName, setCompanyName] = useState('')
+  const [managerName, setManagerName] = useState('')
   const [cpf, setCpf] = useState('')
   const [cpfInput, setCpfInput] = useState('')
   const [loginError, setLoginError] = useState('')
@@ -50,8 +50,8 @@ export default function WorkerPortal() {
       .then(r => r.json())
       .then(json => {
         if (json.error) { setPhase('not-found'); return }
-        setInvestigationTitle(json.data.investigation_title)
         setCompanyName(json.data.company_name)
+        setManagerName(json.data.manager_name ?? '')
         setPhase('login')
       })
       .catch(() => setPhase('not-found'))
@@ -79,6 +79,7 @@ export default function WorkerPortal() {
       setMessages(json.data.messages)
       setSaturation(json.data.saturation_score)
       setWorkerStatus(json.data.status)
+      if (json.data.manager_name) setManagerName(json.data.manager_name)
       setPhase(json.data.status === 'saturated' ? 'done' : 'chat')
     } catch {
       setLoginError('Erro de conexão. Tente novamente.')
@@ -209,7 +210,9 @@ export default function WorkerPortal() {
             <span className="text-white text-xl font-bold">E</span>
           </div>
           <h1 className="text-lg font-semibold text-slate-800">{companyName}</h1>
-          <p className="text-sm text-slate-500 mt-1">{investigationTitle}</p>
+          <p className="text-sm text-slate-500 mt-1">
+            {managerName ? `Solicitado por ${managerName}` : 'Investigação operacional'}
+          </p>
         </div>
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
@@ -261,7 +264,7 @@ export default function WorkerPortal() {
             <span className="text-white text-sm font-bold">E</span>
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium text-slate-800 truncate">{session?.investigation_title}</p>
+            <p className="text-sm font-medium text-slate-800 truncate">Investigação operacional</p>
             <p className="text-xs text-slate-400">{session?.worker_role} · {companyName}</p>
           </div>
         </div>

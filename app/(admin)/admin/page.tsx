@@ -23,12 +23,16 @@ function fmt(n: number, decimals = 2) {
 
 export default function AdminPage() {
   const [stats, setStats] = useState<Stats | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/admin/stats')
-      .then(r => r.json() as Promise<{ data: Stats }>)
-      .then(j => setStats(j.data))
-      .catch(console.error)
+      .then(r => r.json() as Promise<{ data: Stats; error?: string }>)
+      .then(j => {
+        if (j.error || !j.data) { setError(j.error ?? 'Erro ao carregar'); return }
+        setStats(j.data)
+      })
+      .catch(() => setError('Erro de conexão'))
   }, [])
 
   return (
@@ -36,7 +40,12 @@ export default function AdminPage() {
       <h1 className="text-2xl font-semibold text-slate-900 mb-1">Overview</h1>
       <p className="text-sm text-slate-500 mb-8">Visão geral da plataforma</p>
 
-      {!stats && <p className="text-sm text-slate-400">Carregando...</p>}
+      {!stats && !error && <p className="text-sm text-slate-400">Carregando...</p>}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-sm px-4 py-3 text-sm text-red-700">
+          {error} — <a href="/login" className="underline">Fazer login novamente</a>
+        </div>
+      )}
 
       {stats && (
         <>

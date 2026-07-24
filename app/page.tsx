@@ -15,9 +15,6 @@ export default function LandingPage() {
           <span className="text-base font-semibold tracking-tight" style={{ fontFamily: 'var(--font-jakarta)' }}>Elo</span>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="/login" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">
-            Entrar
-          </Link>
           <Link
             href="/login"
             className="text-xs font-semibold uppercase tracking-wider bg-slate-900 text-white px-4 py-2 rounded-sm hover:bg-slate-800 transition-all"

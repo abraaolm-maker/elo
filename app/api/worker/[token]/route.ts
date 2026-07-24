@@ -15,17 +15,19 @@ export async function GET(_req: Request, { params }: RouteParams): Promise<Respo
       investigation_title: schema.investigations.title,
       investigation_status: schema.investigations.status,
       company_name: schema.companies.name,
+      manager_name: schema.managers.name,
     })
     .from(schema.investigation_workers)
     .innerJoin(schema.investigations, eq(schema.investigation_workers.investigation_id, schema.investigations.id))
     .innerJoin(schema.companies, eq(schema.investigations.company_id, schema.companies.id))
+    .innerJoin(schema.managers, eq(schema.investigations.manager_id, schema.managers.id))
     .where(eq(schema.investigation_workers.access_token, token))
     .get()
 
   if (!iw) return Response.json({ error: 'Link inválido ou expirado.' }, { status: 404 })
   if (iw.investigation_status === 'cancelled') return Response.json({ error: 'Esta investigação foi cancelada.' }, { status: 410 })
 
-  return Response.json({ data: iw }, { status: 200 })
+  return Response.json({ data: { ...iw, investigation_title: undefined } }, { status: 200 })
 }
 
 // POST — autenticar worker com CPF
@@ -43,10 +45,10 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       status: schema.investigation_workers.status,
       saturation_score: schema.investigation_workers.saturation_score,
       investigation_id: schema.investigation_workers.investigation_id,
-      investigation_title: schema.investigations.title,
       investigation_status: schema.investigations.status,
       problem_description: schema.investigations.problem_description,
       company_name: schema.companies.name,
+      manager_name: schema.managers.name,
       worker_cpf: schema.workers.cpf,
       worker_alias: schema.workers.anonymous_alias,
       worker_role: schema.workers.role,
@@ -54,6 +56,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .from(schema.investigation_workers)
     .innerJoin(schema.investigations, eq(schema.investigation_workers.investigation_id, schema.investigations.id))
     .innerJoin(schema.companies, eq(schema.investigations.company_id, schema.companies.id))
+    .innerJoin(schema.managers, eq(schema.investigations.manager_id, schema.managers.id))
     .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
     .where(eq(schema.investigation_workers.access_token, token))
     .get()
@@ -106,8 +109,8 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       iw_id: iw.iw_id,
       status: iw.status,
       saturation_score: iw.saturation_score,
-      investigation_title: iw.investigation_title,
       company_name: iw.company_name,
+      manager_name: iw.manager_name,
       worker_role: iw.worker_role,
       messages: workerMessages,
     }
