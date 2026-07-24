@@ -578,22 +578,29 @@ export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName
         }),
       })
 
-      const data = await res.json() as ChatRespostaAPI
+      const data = await res.json() as ChatRespostaAPI & { error?: string }
+
+      if (!res.ok) {
+        const errMsg = data.error ?? `Erro ${res.status}`
+        setMensagens(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: `Erro: ${errMsg}` }])
+        return
+      }
 
       const newDraft = { ...draft }
-      if (data.updates.fase) newDraft.fase = data.updates.fase
-      if (data.updates.titulo !== undefined) newDraft.titulo = data.updates.titulo ?? draft.titulo
-      if (data.updates.descricao_problema !== undefined) newDraft.descricao_problema = data.updates.descricao_problema ?? draft.descricao_problema
-      if (data.updates.adicionar_participante) {
+      if (data.updates?.fase) newDraft.fase = data.updates.fase
+      if (data.updates?.titulo !== undefined) newDraft.titulo = data.updates.titulo ?? draft.titulo
+      if (data.updates?.descricao_problema !== undefined) newDraft.descricao_problema = data.updates.descricao_problema ?? draft.descricao_problema
+      if (data.updates?.adicionar_participante) {
         newDraft.participantes = [...newDraft.participantes, { ...data.updates.adicionar_participante, manager_notes: '' }]
       }
       setDraft(newDraft)
       setMensagens(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: data.message }])
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido'
       setMensagens(prev => [...prev, {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: 'Ops, problema de conexão. Pode repetir?',
+        content: `Ops, problema de conexão: ${msg}`,
       }])
     } finally {
       setDigitando(false)

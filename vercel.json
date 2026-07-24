@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "app/api/investigations/chat/route.ts": { "maxDuration": 60 },
+    "app/api/investigations/[id]/start/route.ts": { "maxDuration": 60 },
+    "app/api/admin/investigations/[id]/reprocess/route.ts": { "maxDuration": 60 },
+    "app/api/reports/[investigationId]/route.ts": { "maxDuration": 60 },
+    "app/api/telegram/webhook/route.ts": { "maxDuration": 60 }
+  }
+}

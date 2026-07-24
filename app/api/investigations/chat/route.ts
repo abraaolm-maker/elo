@@ -254,8 +254,9 @@ export async function POST(request: Request): Promise<Response> {
 
   } catch (error) {
     if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
-    console.error('[POST /api/investigations/chat]', error)
-    return Response.json({ error: 'Erro interno' }, { status: 500 })
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error('[POST /api/investigations/chat]', msg, error)
+    return Response.json({ error: `Erro interno: ${msg}` }, { status: 500 })
   }
 }
 
