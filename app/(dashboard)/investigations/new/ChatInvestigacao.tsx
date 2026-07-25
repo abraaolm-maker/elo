@@ -22,7 +22,7 @@ interface Participante {
 }
 
 interface Draft {
-  fase: 'problema' | 'participantes' | 'pronto'
+  fase: 'contexto' | 'contexto_confirmar' | 'problema' | 'participantes' | 'pronto'
   titulo: string | null
   descricao_problema: string | null
   participantes: Participante[]
@@ -518,7 +518,15 @@ function PainelParticipantes({ draft, onAdicionar, onRemover, onCriar, criando, 
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName: string; mensagemInicial: string }) {
+export function ChatInvestigacao({
+  managerName,
+  mensagemInicial,
+  faseInicial = 'contexto',
+}: {
+  managerName: string
+  mensagemInicial: string
+  faseInicial?: Draft['fase']
+}) {
   const router = useRouter()
   const [mensagens, setMensagens] = useState<Mensagem[]>([
     { id: 'init', role: 'assistant', content: mensagemInicial },
@@ -527,7 +535,7 @@ export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName
   const [digitando, setDigitando] = useState(false)
   const [criando, setCriando] = useState(false)
   const [draft, setDraft] = useState<Draft>({
-    fase: 'problema',
+    fase: faseInicial,
     titulo: null,
     descricao_problema: null,
     participantes: [],
@@ -661,6 +669,14 @@ export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName
   }
 
   const naFaseParticipantes = draft.fase === 'participantes' || draft.fase === 'pronto'
+  const naFaseContexto = draft.fase === 'contexto' || draft.fase === 'contexto_confirmar'
+  const naFaseProblema = draft.fase === 'problema'
+
+  const etapaLabel = naFaseContexto
+    ? 'Contexto da empresa'
+    : naFaseParticipantes
+      ? 'Definindo participantes'
+      : 'Entendendo o problema'
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -671,17 +687,20 @@ export function ChatInvestigacao({ managerName, mensagemInicial }: { managerName
           <AvatarIA />
           <div>
             <p className="text-sm font-semibold text-slate-900" style={{ fontFamily: 'var(--font-jakarta)' }}>Assistente Elo</p>
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
-              {naFaseParticipantes ? 'Definindo participantes' : 'Entendendo o problema'}
-            </p>
+            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">{etapaLabel}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
           {/* Etapas */}
           <div className="flex items-center gap-2 text-[10px] font-semibold tracking-widest uppercase">
-            <span className={`flex items-center gap-1.5 ${draft.fase === 'problema' ? 'text-teal-600' : 'text-slate-400'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${draft.fase === 'problema' ? 'bg-teal-500' : 'bg-emerald-400'}`} />
+            <span className={`flex items-center gap-1.5 ${naFaseContexto ? 'text-teal-600' : 'text-slate-400'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${naFaseContexto ? 'bg-teal-500' : 'bg-emerald-400'}`} />
+              Contexto
+            </span>
+            <span className="text-slate-200">—</span>
+            <span className={`flex items-center gap-1.5 ${naFaseProblema ? 'text-teal-600' : naFaseParticipantes ? 'text-slate-400' : 'text-slate-300'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${naFaseProblema ? 'bg-teal-500' : naFaseParticipantes ? 'bg-emerald-400' : 'bg-slate-200'}`} />
               Problema
             </span>
             <span className="text-slate-200">—</span>

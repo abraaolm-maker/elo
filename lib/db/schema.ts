@@ -16,9 +16,10 @@ export const managers = sqliteTable('managers', {
   name:          text('name').notNull(),
   email:         text('email').notNull().unique(),
   password_hash: text('password_hash').notNull(),
-  is_admin:      integer('is_admin', { mode: 'boolean' }).notNull().default(false),
-  is_active:     integer('is_active', { mode: 'boolean' }).notNull().default(true),
-  created_at:    text('created_at').notNull().default(sql`(datetime('now'))`),
+  is_admin:        integer('is_admin', { mode: 'boolean' }).notNull().default(false),
+  is_active:       integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  company_context: text('company_context'), // JSON: {company_description, sector, manager_position}
+  created_at:      text('created_at').notNull().default(sql`(datetime('now'))`),
 })
 
 // ─── WORKERS ──────────────────────────────────────────────────────────────────

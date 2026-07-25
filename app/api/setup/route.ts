@@ -175,6 +175,7 @@ export async function GET(request: Request) {
   `, 'tabela api_usage_logs'))
 
   // Colunas em managers
+  results.push(await runSafe(`ALTER TABLE managers ADD COLUMN company_context TEXT`, 'managers.company_context'))
   results.push(await runSafe(`ALTER TABLE managers ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`, 'managers.is_admin'))
   results.push(await runSafe(`ALTER TABLE managers ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1`, 'managers.is_active'))
   results.push(await runSafe(`ALTER TABLE managers ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''`, 'managers.password_hash'))
