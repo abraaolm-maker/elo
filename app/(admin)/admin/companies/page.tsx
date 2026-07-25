@@ -28,7 +28,7 @@ export default function AdminCompaniesPage() {
     setLoading(true)
     fetch('/api/admin/companies')
       .then(r => r.json() as Promise<{ data: Company[] }>)
-      .then(j => setCompanies(j.data))
+      .then(j => setCompanies(j.data ?? []))
       .catch(console.error)
       .finally(() => setLoading(false))
   }

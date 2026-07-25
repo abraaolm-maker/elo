@@ -10,8 +10,12 @@ export async function GET(request: Request) {
     const result = await Promise.all(companies.map(async (company) => {
       const [mgrsRow] = await db.select({ total: count() }).from(schema.managers).where(eq(schema.managers.company_id, company.id))
       const [invsRow] = await db.select({ total: count() }).from(schema.investigations).where(eq(schema.investigations.company_id, company.id))
-      const [costRow] = await db.select({ brl: sum(schema.api_usage_logs.cost_brl) }).from(schema.api_usage_logs).where(eq(schema.api_usage_logs.company_id, company.id))
-      return { ...company, managers_count: mgrsRow?.total ?? 0, investigations_count: invsRow?.total ?? 0, total_cost_brl: Number(costRow?.brl ?? 0) }
+      let total_cost_brl = 0
+      try {
+        const [costRow] = await db.select({ brl: sum(schema.api_usage_logs.cost_brl) }).from(schema.api_usage_logs).where(eq(schema.api_usage_logs.company_id, company.id))
+        total_cost_brl = Number(costRow?.brl ?? 0)
+      } catch { /* api_usage_logs may not exist yet */ }
+      return { ...company, managers_count: mgrsRow?.total ?? 0, investigations_count: invsRow?.total ?? 0, total_cost_brl }
     }))
     return Response.json({ data: result })
   } catch (error) {
