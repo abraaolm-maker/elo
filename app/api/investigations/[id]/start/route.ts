@@ -115,13 +115,15 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
         retry_count: 0,
       })
 
-      // Enviar via WhatsApp (falha não bloqueia)
-      sendWhatsAppMessage({
-        number: iw.whatsapp_number,
-        text: engineOutput.next_question,
-      }).catch(err => {
-        console.error('[investigations start] whatsapp send failed (non-fatal)', err)
-      })
+      // Enviar via WhatsApp apenas quando há número real (portal: é placeholder sem WhatsApp)
+      if (!iw.whatsapp_number.startsWith('portal:')) {
+        sendWhatsAppMessage({
+          number: iw.whatsapp_number,
+          text: engineOutput.next_question,
+        }).catch(err => {
+          console.error('[investigations start] whatsapp send failed (non-fatal)', err)
+        })
+      }
     }
 
     // Enviar em paralelo

@@ -57,7 +57,6 @@ interface AvailableWorker {
   anonymous_alias: string
   role: string
   role_description: string | null
-  whatsapp_masked: string
   is_active: boolean
 }
 
@@ -246,7 +245,7 @@ function AddParticipantModal({
               <li key={w.id} className="flex items-center justify-between gap-3 border border-slate-100 rounded-sm px-3 py-2.5 hover:bg-slate-50">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-900 truncate">{w.anonymous_alias}</p>
-                  <p className="text-xs text-slate-500">{w.role} · {w.whatsapp_masked}</p>
+                  <p className="text-xs text-slate-500">{w.role}</p>
                 </div>
                 <button
                   onClick={() => void adicionar(w.id)}
@@ -384,12 +383,14 @@ export function InvestigationDetail(props: Props) {
     }
   }, [props.investigation.id])
 
+  // Polling adaptativo: mais frequente quando active, mais lento quando saturating
   useEffect(() => {
     const status = investigation.status
     if (status === 'completed' || status === 'cancelled') return
-    const interval = setInterval(() => void refreshData(), 5000)
-    return () => clearInterval(interval)
-  }, [investigation.status, refreshData])
+    const delay = status === 'active' ? 8000 : 15000
+    const timer = setTimeout(() => void refreshData(), delay)
+    return () => clearTimeout(timer)
+  }, [investigation.status, refreshData, workers])
 
   async function iniciar() {
     setErroInicio(null)
@@ -671,8 +672,8 @@ export function InvestigationDetail(props: Props) {
                         {iwCfg.label}
                       </div>
                       {/* placeholder — link está abaixo do header */}
-                      {/* Botão editar (apenas quando não concluída) */}
-                      {!isConcluida && (
+                      {/* Botão editar (apenas quando pendente — evita alterar cargo durante investigação ativa) */}
+                      {isPending && (
                         <button
                           onClick={() => setEditandoWorker(worker)}
                           className="text-slate-300 hover:text-teal-600 transition-colors"
@@ -717,8 +718,8 @@ export function InvestigationDetail(props: Props) {
                           ✓ Acessado em {new Date(worker.first_accessed_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                         </span>
                       ) : (
-                        <span className="text-[10px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-1 rounded-sm font-medium whitespace-nowrap">
-                          Nunca acessado
+                        <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-sm font-medium whitespace-nowrap">
+                          Aguardando acesso
                         </span>
                       )}
                       <button
@@ -740,6 +741,17 @@ export function InvestigationDetail(props: Props) {
 
                 {/* Conversa */}
                 <div className="p-5 space-y-2 min-h-[60px]">
+                  {(() => {
+                    const lastInbound = [...workerMsgs].reverse().find(m => m.direction === 'inbound')
+                    if (lastInbound && investigation.status === 'active') {
+                      return (
+                        <p className="text-[10px] font-mono text-slate-400 text-right mb-1">
+                          Última resposta: {new Date(lastInbound.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      )
+                    }
+                    return null
+                  })()}
                   {workerMsgs.length === 0 ? (
                     <div className="text-center py-4">
                       {investigation.status === 'active' ? (

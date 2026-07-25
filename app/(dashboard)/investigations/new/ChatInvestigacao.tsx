@@ -45,7 +45,6 @@ interface WorkerCadastrado {
   anonymous_alias: string
   role: string
   role_description: string | null
-  whatsapp_masked: string
   is_active: boolean
 }
 
@@ -98,7 +97,12 @@ function BolhaMensagem({ msg }: { msg: Mensagem }) {
   }
 
   function formatarNegrito(texto: string) {
-    return texto.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    const escapado = texto
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+    return escapado.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
   }
 
   if (ehIA) {
@@ -278,7 +282,7 @@ function FormParticipante({ onAdicionar, workersJaAdicionados }: FormParticipant
                   <li key={w.id} className={`flex items-center justify-between gap-3 border rounded-sm px-3 py-2.5 transition-colors ${jaAdicionado ? 'border-emerald-200 bg-emerald-50' : 'border-slate-100 hover:bg-slate-50'}`}>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-slate-900 truncate">{w.anonymous_alias}</p>
-                      <p className="text-xs text-slate-500">{w.role} · {w.whatsapp_masked}</p>
+                      <p className="text-xs text-slate-500">{w.role}</p>
                     </div>
                     {jaAdicionado ? (
                       <span className="text-[10px] font-semibold text-emerald-600 shrink-0">Adicionado</span>
@@ -318,20 +322,6 @@ function FormParticipante({ onAdicionar, workersJaAdicionados }: FormParticipant
                 className={inputClass}
               />
             </div>
-          </div>
-
-          <div>
-            <label className={labelClass}>
-              WhatsApp
-              <span className="text-slate-300 font-normal normal-case tracking-normal ml-1">(opcional)</span>
-            </label>
-            <input
-              value={whatsapp}
-              onChange={e => setWhatsapp(e.target.value)}
-              placeholder="5511999999999"
-              className={inputClass}
-            />
-            <p className="text-[10px] text-slate-400 mt-1">Com 55 + DDD. Ex: 5511999999999</p>
           </div>
 
           <div>

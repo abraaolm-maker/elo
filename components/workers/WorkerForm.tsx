@@ -1,10 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 
 interface WorkerFormProps {
   onSuccess: () => void
@@ -15,19 +11,15 @@ export function WorkerForm({ onSuccess, onCancel }: WorkerFormProps) {
   const [name, setName] = useState('')
   const [role, setRole] = useState('')
   const [roleDescription, setRoleDescription] = useState('')
-  const [whatsappNumber, setWhatsappNumber] = useState('')
+  const [cpf, setCpf] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   function validateForm(): string | null {
     if (!name.trim()) return 'O nome é obrigatório.'
     if (!role.trim()) return 'O cargo é obrigatório.'
-    if (!whatsappNumber.trim()) return 'O número WhatsApp é obrigatório.'
-    if (!/^\d+$/.test(whatsappNumber)) return 'O número deve conter apenas dígitos.'
-    if (!whatsappNumber.startsWith('55')) return 'O número deve começar com 55.'
-    if (whatsappNumber.length < 12 || whatsappNumber.length > 13) {
-      return 'Formato inválido. Use: 5511999999999'
-    }
+    const cpfDigits = cpf.replace(/\D/g, '')
+    if (cpfDigits && cpfDigits.length !== 11) return 'CPF inválido — deve ter 11 dígitos.'
     return null
   }
 
@@ -36,10 +28,7 @@ export function WorkerForm({ onSuccess, onCancel }: WorkerFormProps) {
     setError(null)
 
     const validationError = validateForm()
-    if (validationError) {
-      setError(validationError)
-      return
-    }
+    if (validationError) { setError(validationError); return }
 
     setLoading(true)
     try {
@@ -49,18 +38,13 @@ export function WorkerForm({ onSuccess, onCancel }: WorkerFormProps) {
         body: JSON.stringify({
           name: name.trim(),
           role: role.trim(),
-          role_description: roleDescription.trim(),
-          whatsapp_number: whatsappNumber.trim(),
+          role_description: roleDescription.trim() || undefined,
+          cpf: cpf.replace(/\D/g, '') || undefined,
         }),
       })
 
       const result = await response.json() as { error?: string }
-
-      if (!response.ok) {
-        setError(result.error ?? 'Erro ao cadastrar worker.')
-        return
-      }
-
+      if (!response.ok) { setError(result.error ?? 'Erro ao cadastrar trabalhador.'); return }
       onSuccess()
     } catch {
       setError('Erro de conexão. Tente novamente.')
@@ -69,70 +53,55 @@ export function WorkerForm({ onSuccess, onCancel }: WorkerFormProps) {
     }
   }
 
+  const inputClass = "w-full border border-slate-200 rounded-sm px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+  const labelClass = "block text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1.5"
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="name">Nome</Label>
-        <Input
-          id="name"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="Ex: João Silva"
-          required
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelClass}>Nome completo <span className="text-red-400">*</span></label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="João Silva" className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>
+            CPF
+            <span className="text-slate-300 font-normal normal-case tracking-normal ml-1">(acesso ao portal)</span>
+          </label>
+          <input value={cpf} onChange={e => setCpf(e.target.value)} placeholder="000.000.000-00" className={inputClass} />
+        </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="role">Cargo</Label>
-        <Input
-          id="role"
-          value={role}
-          onChange={e => setRole(e.target.value)}
-          placeholder="Ex: Mestre de Obras, Supervisor de Linha"
-          required
-        />
+      <div>
+        <label className={labelClass}>Cargo <span className="text-red-400">*</span></label>
+        <input value={role} onChange={e => setRole(e.target.value)} placeholder="Mestre de obras, Supervisor de linha…" className={inputClass} />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="role-description">Responsabilidades do cargo</Label>
-        <Textarea
-          id="role-description"
+      <div>
+        <label className={labelClass}>
+          Responsabilidades do cargo
+          <span className="text-slate-300 font-normal normal-case tracking-normal ml-1">(melhora as perguntas da IA)</span>
+        </label>
+        <textarea
           value={roleDescription}
           onChange={e => setRoleDescription(e.target.value)}
           placeholder="Descreva o que essa pessoa faz no dia a dia — isso ajuda a IA a fazer as perguntas certas"
           rows={3}
+          className={`${inputClass} resize-none`}
         />
-        <p className="text-xs text-gray-500">
-          Quanto mais detalhada a descrição, melhores serão as perguntas da IA.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="whatsapp">Número WhatsApp</Label>
-        <Input
-          id="whatsapp"
-          value={whatsappNumber}
-          onChange={e => setWhatsappNumber(e.target.value.replace(/\D/g, ''))}
-          placeholder="5511999999999"
-          maxLength={13}
-          required
-        />
-        <p className="text-xs text-gray-500">
-          Formato: 55 + DDD + número. Apenas dígitos, sem espaços ou traços.
-        </p>
       </div>
 
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">{error}</p>
+        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-sm px-3 py-2">{error}</p>
       )}
 
-      <div className="flex gap-2 pt-2">
-        <Button type="submit" disabled={loading} className="flex-1">
-          {loading ? 'Cadastrando…' : 'Cadastrar worker'}
-        </Button>
-        <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
+      <div className="flex gap-2 justify-end pt-1">
+        <button type="button" onClick={onCancel} disabled={loading} className="text-xs font-semibold uppercase tracking-wider border border-slate-200 text-slate-600 px-4 py-2 rounded-sm hover:bg-slate-50 disabled:opacity-50">
           Cancelar
-        </Button>
+        </button>
+        <button type="submit" disabled={loading} className="text-xs font-semibold uppercase tracking-wider bg-slate-900 text-white px-4 py-2 rounded-sm hover:bg-slate-800 disabled:opacity-50">
+          {loading ? 'Cadastrando…' : 'Cadastrar trabalhador'}
+        </button>
       </div>
     </form>
   )

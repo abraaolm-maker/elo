@@ -9,13 +9,8 @@ export interface MaskedWorker {
   anonymous_alias: string
   role: string
   role_description: string | null
-  whatsapp_masked: string
   is_active: boolean
   created_at: string
-}
-
-function maskNumber(phone: string): string {
-  return `****${phone.slice(-4)}`
 }
 
 export default async function WorkersPage() {
@@ -33,7 +28,6 @@ export default async function WorkersPage() {
     anonymous_alias: w.anonymous_alias,
     role: w.role,
     role_description: w.role_description,
-    whatsapp_masked: maskNumber(w.whatsapp_number),
     is_active: w.is_active,
     created_at: w.created_at,
   }))

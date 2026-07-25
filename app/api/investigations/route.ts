@@ -3,7 +3,7 @@ import { db, schema } from '@/lib/db'
 import { eq, and, inArray, count } from 'drizzle-orm'
 import crypto from 'crypto'
 
-// Gerar alias sequencial: Colaborador A, B, C...
+// Gerar alias sequencial: Colaborador A…Z, AA, AB…
 async function gerarAlias(companyId: string): Promise<string> {
   const total = await db
     .select({ cnt: count() })
@@ -12,7 +12,14 @@ async function gerarAlias(companyId: string): Promise<string> {
     .get()
   const idx = total?.cnt ?? 0
   const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  const sufixo = idx < 26 ? letras[idx] : String(idx + 1)
+  let sufixo: string
+  if (idx < 26) {
+    sufixo = letras[idx]!
+  } else {
+    const hi = Math.floor((idx - 26) / 26)
+    const lo = (idx - 26) % 26
+    sufixo = (hi < 26 ? letras[hi]! : String(hi + 1)) + letras[lo]!
+  }
   return `Colaborador ${sufixo}`
 }
 
