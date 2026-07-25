@@ -16,7 +16,15 @@ export default async function PaginaInvestigacao({ params }: RouteParams) {
 
   const [investigation, iwRows, msgRows] = await Promise.all([
     db
-      .select()
+      .select({
+        id: schema.investigations.id,
+        company_id: schema.investigations.company_id,
+        title: schema.investigations.title,
+        problem_description: schema.investigations.problem_description,
+        status: schema.investigations.status,
+        created_at: schema.investigations.created_at,
+        completed_at: schema.investigations.completed_at,
+      })
       .from(schema.investigations)
       .where(
         and(

@@ -12,7 +12,15 @@ export async function GET(_request: Request, { params }: RouteParams): Promise<R
     const session = await requireAuth(_request)
 
     const investigation = await db
-      .select()
+      .select({
+        id: schema.investigations.id,
+        company_id: schema.investigations.company_id,
+        title: schema.investigations.title,
+        problem_description: schema.investigations.problem_description,
+        status: schema.investigations.status,
+        created_at: schema.investigations.created_at,
+        completed_at: schema.investigations.completed_at,
+      })
       .from(schema.investigations)
       .where(
         and(
