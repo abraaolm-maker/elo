@@ -30,7 +30,7 @@ function InvestigationsTable() {
   useEffect(() => {
     fetch('/api/admin/companies')
       .then(r => r.json() as Promise<{ data: Company[] }>)
-      .then(j => setCompanies(j.data))
+      .then(j => setCompanies(j.data ?? []))
       .catch(console.error)
   }, [])
 
@@ -43,7 +43,7 @@ function InvestigationsTable() {
     if (dateTo)        p.set('date_to', dateTo)
     fetch('/api/admin/investigations?' + p.toString())
       .then(r => r.json() as Promise<{ data: Inv[] }>)
-      .then(j => setItems(j.data))
+      .then(j => setItems(j.data ?? []))
       .catch(console.error)
       .finally(() => setLoading(false))
   }
