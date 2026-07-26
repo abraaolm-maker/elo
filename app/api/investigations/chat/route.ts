@@ -216,7 +216,7 @@ export async function POST(request: Request): Promise<Response> {
       logUsage({
         companyId: session.companyId,
         managerId: session.managerId,
-        operation: 'investigation_chat',
+        operation: 'investigation_engine',
         model: 'claude-sonnet-4-6',
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,

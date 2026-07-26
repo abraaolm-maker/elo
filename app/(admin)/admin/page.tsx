@@ -267,7 +267,7 @@ function TabGeral({ stats }: { stats: StatsData }) {
                       dataKey="value" paddingAngle={2} animationDuration={900}>
                       {donutData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                     </Pie>
-                    <Tooltip {...tooltipStyle} formatter={(v: number) => [v + ' inv.', '']} />
+                    <Tooltip {...tooltipStyle} formatter={(v: unknown) => [String(v) + ' inv.', '']} />
                     <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -314,7 +314,7 @@ function TabEmpresas({ stats }: { stats: StatsData }) {
             <BarChart data={topByInv} layout="vertical" margin={{ top: 0, right: 20, left: 4, bottom: 0 }}>
               <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 10.5, fill: '#334155' }} axisLine={false} tickLine={false} width={110} />
-              <Tooltip {...tooltipStyle} formatter={(v: number) => [v + ' investigações', '']} />
+              <Tooltip {...tooltipStyle} formatter={(v: unknown) => [String(v) + ' investigações', '']} />
               <Bar dataKey="value" fill="#14b8a6" radius={[0, 4, 4, 0]} maxBarSize={18} animationDuration={900}>
                 {topByInv.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
               </Bar>
@@ -328,7 +328,7 @@ function TabEmpresas({ stats }: { stats: StatsData }) {
               <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false}
                 tickFormatter={v => 'R$' + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v.toFixed(0))} />
               <YAxis type="category" dataKey="name" tick={{ fontSize: 10.5, fill: '#334155' }} axisLine={false} tickLine={false} width={110} />
-              <Tooltip {...tooltipStyle} formatter={(v: number) => [fmtR$(v), '']} />
+              <Tooltip {...tooltipStyle} formatter={(v: unknown) => [fmtR$(Number(v)), '']} />
               <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={18} animationDuration={900}>
                 {topByCost.map((_, i) => <Cell key={i} fill={CHART_COLORS[(i + 3) % CHART_COLORS.length]} />)}
               </Bar>
@@ -686,7 +686,7 @@ function TabAvancado({ stats }: { stats: StatsData }) {
                 <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={50}
                   tickFormatter={v => v >= 1000 ? 'R$' + (v / 1000).toFixed(1) + 'k' : 'R$' + v.toFixed(0)} />
-                <Tooltip {...tooltipStyle} formatter={(v: number) => [fmtR$(v), '']} />
+                <Tooltip {...tooltipStyle} formatter={(v: unknown) => [fmtR$(Number(v)), '']} />
                 <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
                 {top5Names.map((name, i) => (
                   <Line key={name} dataKey={name} stroke={CHART_COLORS[i % CHART_COLORS.length]}
