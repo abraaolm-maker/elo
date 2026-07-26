@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -621,14 +622,16 @@ function TabComparativo({ stats, filteredSeries }: { stats: StatsData; filteredS
 function TabPlanos({ stats }: { stats: StatsData }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [configs, setConfigs] = useState<{ plan: string; label: string; max_investigations: number; max_cost_brl: number; max_questions_per_worker: number }[]>([])
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving]   = useState(false)
+  const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ max_investigations: 0, max_cost_brl: 0, max_questions_per_worker: 0 })
 
   useEffect(() => {
+    setLoading(true)
     fetch('/api/admin/plans')
       .then(r => r.json() as Promise<{ data: typeof configs }>)
-      .then(j => setConfigs(j.data ?? []))
-      .catch(console.error)
+      .then(j => { setConfigs(j.data ?? []); setLoading(false) })
+      .catch(() => setLoading(false))
   }, [])
 
   function startEdit(plan: string) {
@@ -663,6 +666,18 @@ function TabPlanos({ stats }: { stats: StatsData }) {
       <div className="mb-6">
         <p className="text-sm font-semibold text-slate-800 mb-1">Configuração dos planos</p>
         <p className="text-xs text-slate-400 mb-4">Use -1 para ilimitado em qualquer campo</p>
+        {loading && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[1,2,3].map(i => <div key={i} className="border border-slate-200 rounded-sm p-5 h-48 animate-pulse bg-slate-50" />)}
+          </div>
+        )}
+        {!loading && configs.length === 0 && (
+          <div className="border border-amber-200 bg-amber-50 rounded-sm px-4 py-3 text-sm text-amber-700">
+            Configurações de plano não encontradas. Execute{' '}
+            <code className="font-mono bg-amber-100 px-1 rounded">/api/setup</code>{' '}
+            para criar as configurações padrão.
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {configs.map(cfg => {
             const colors = PLAN_COLORS[cfg.plan] ?? { border: 'border-slate-200', bg: 'bg-slate-50', text: 'text-slate-700' }
@@ -1040,9 +1055,13 @@ function Skeleton() {
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function AdminPage() {
+  const searchParams = useSearchParams()
   const [stats, setStats]     = useState<StatsData | null>(null)
   const [error, setError]     = useState<string | null>(null)
-  const [tab, setTab]         = useState<Tab>('geral')
+  const [tab, setTab]         = useState<Tab>(() => {
+    const t = searchParams.get('tab')
+    return (TABS.find(x => x.id === t)?.id ?? 'geral') as Tab
+  })
   const [mounted, setMounted] = useState(false)
   const [filters, setFilters] = useState<Filters>(defaultFilters())
 
