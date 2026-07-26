@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -27,6 +27,15 @@ interface StatsData {
   recent_investigations: RecentInv[]; plan_usage: PlanUsage[]
 }
 
+// ─── Filtros ──────────────────────────────────────────────────────────────────
+interface Filters {
+  years: string[]
+  company: string   // '' = all, else company id
+  status: string    // '' = all
+  month: string     // '' = all, else '01'–'12'
+}
+function defaultFilters(): Filters { return { years: [], company: '', status: '', month: '' } }
+
 type Tab = 'geral' | 'empresas' | 'comparativo' | 'planos' | 'avancado' | 'feed'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'geral',       label: 'Visão Geral' },
@@ -34,7 +43,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'comparativo', label: 'Comparativo Anual' },
   { id: 'planos',      label: 'Planos & Limites' },
   { id: 'avancado',    label: 'Painel Avançado' },
-  { id: 'feed',        label: 'Feed Recente' },
+  { id: 'feed',        label: 'Feed & Tabela' },
 ]
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -48,7 +57,7 @@ const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendente', active: 'Ativa', completed: 'Concluída', cancelled: 'Cancelada', saturated: 'Saturada',
 }
 
-// ─── Hooks ────────────────────────────────────────────────────────────────────
+// ─── Hook: count-up animado ───────────────────────────────────────────────────
 function useCountUp(target: number, duration = 850): number {
   const [val, setVal] = useState(0)
   useEffect(() => {
@@ -67,6 +76,59 @@ function useCountUp(target: number, duration = 850): number {
   return val
 }
 
+// ─── Hook: dados filtrados ────────────────────────────────────────────────────
+function useFilteredData(stats: StatsData, filters: Filters) {
+  return useMemo(() => {
+    // Filtrar séries por ano e mês
+    const filteredSeries = stats.series_by_month.filter(s => {
+      if (filters.years.length > 0 && !filters.years.includes(s.year)) return false
+      if (filters.month && s.month !== filters.month) return false
+      return true
+    })
+
+    // Filtrar empresas
+    const filteredCompanies: CompanyStat[] = filters.company
+      ? stats.by_company.filter(c => c.id === filters.company)
+      : stats.by_company
+
+    // Filtrar investigações recentes
+    const filteredInvestigations = stats.recent_investigations.filter(inv => {
+      if (filters.company) {
+        const co = stats.by_company.find(c => c.id === filters.company)
+        if (co && inv.company_name !== co.name) return false
+      }
+      if (filters.status && inv.status !== filters.status) return false
+      if (filters.years.length > 0 && !filters.years.includes(inv.created_at.slice(0, 4))) return false
+      if (filters.month && inv.created_at.slice(5, 7) !== filters.month) return false
+      return true
+    })
+
+    // KPIs derivados
+    let kpiTotal    = stats.investigations.total
+    let kpiActive   = stats.investigations.active
+    let kpiCompleted = stats.investigations.completed
+    let kpiPending  = stats.investigations.pending
+    let kpiCost     = stats.total_cost_brl
+    let kpiMessages = stats.total_messages
+
+    if (filters.company) {
+      const co = filteredCompanies[0]
+      if (co) {
+        kpiTotal    = co.inv_count
+        kpiActive   = co.active
+        kpiCompleted = co.completed
+        kpiPending  = co.pending
+        kpiCost     = co.cost_brl
+        kpiMessages = 0
+      }
+    } else if (filters.years.length > 0 || filters.month) {
+      kpiTotal = filteredSeries.reduce((a, s) => a + s.count, 0)
+    }
+
+    return { filteredSeries, filteredCompanies, filteredInvestigations, kpiTotal, kpiActive, kpiCompleted, kpiPending, kpiCost, kpiMessages }
+  }, [stats, filters])
+}
+
 // ─── Formatters ───────────────────────────────────────────────────────────────
 const fmtN   = (n: number, dec = 0) => n.toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 const fmtR$  = (n: number) => 'R$ ' + fmtN(n, 2)
@@ -80,13 +142,13 @@ function KpiCard({ label, value, format = 'n0', accentColor, sub, prefix = '' }:
 }) {
   const animated = useCountUp(value)
   let display: string
-  if (format === 'pct')  display = fmtN(animated, 1) + '%'
-  else if (format === 'brl') display = fmtR$(animated)
-  else if (format === 'h')   display = fmtN(animated, 1) + 'h'
-  else if (format === 'n1')  display = fmtN(animated, 1)
-  else display = prefix + fmtN(Math.round(animated))
+  if (format === 'pct')       display = fmtN(animated, 1) + '%'
+  else if (format === 'brl')  display = fmtR$(animated)
+  else if (format === 'h')    display = fmtN(animated, 1) + 'h'
+  else if (format === 'n1')   display = fmtN(animated, 1)
+  else                        display = prefix + fmtN(Math.round(animated))
   return (
-    <div className="bg-white border border-slate-200 rounded-sm p-5 relative overflow-hidden group hover:shadow-sm transition-shadow duration-200">
+    <div className="bg-white border border-slate-200 rounded-sm p-5 relative overflow-hidden hover:shadow-sm transition-shadow duration-200">
       <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: accentColor }} />
       <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">{label}</p>
       <p className="text-2xl font-bold text-slate-900 tabular-nums">{display}</p>
@@ -172,9 +234,86 @@ const tooltipStyle = {
   labelStyle: { fontWeight: 600, color: '#334155' },
 }
 
+// ─── Filtro Global ────────────────────────────────────────────────────────────
+function FilterBar({ stats, filters, onChange }: {
+  stats: StatsData; filters: Filters; onChange: (f: Filters) => void
+}) {
+  const years = [...new Set(stats.series_by_month.map(s => s.year))].sort()
+  const companies = [...stats.by_company].sort((a, b) => a.name.localeCompare(b.name))
+  const hasFilter = filters.years.length > 0 || filters.company !== '' || filters.status !== '' || filters.month !== ''
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-sm px-4 py-3 mb-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+      {/* Year chips */}
+      {years.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Ano</span>
+          {years.map(y => {
+            const active = filters.years.includes(y)
+            return (
+              <button key={y} onClick={() => {
+                const next = active ? filters.years.filter(x => x !== y) : [...filters.years, y]
+                onChange({ ...filters, years: next })
+              }}
+                className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border transition-all duration-150
+                  ${active ? 'bg-teal-500 border-teal-500 text-white shadow-sm' : 'border-slate-200 text-slate-500 hover:border-teal-300 hover:text-teal-600'}`}>
+                {y}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {years.length > 0 && <div className="h-4 w-px bg-slate-200 hidden sm:block" />}
+
+      {/* Month */}
+      <select value={filters.month} onChange={e => onChange({ ...filters, month: e.target.value })}
+        className="text-xs border border-slate-200 rounded-sm px-2 py-1 text-slate-600 bg-white outline-none focus:border-teal-400 cursor-pointer">
+        <option value="">Todos os meses</option>
+        {MONTHS_SHORT.map((m, i) => (
+          <option key={i} value={String(i + 1).padStart(2, '0')}>{m}</option>
+        ))}
+      </select>
+
+      {/* Company */}
+      <select value={filters.company} onChange={e => onChange({ ...filters, company: e.target.value })}
+        className="text-xs border border-slate-200 rounded-sm px-2 py-1 text-slate-600 bg-white outline-none focus:border-teal-400 cursor-pointer max-w-[200px]">
+        <option value="">Todas as empresas</option>
+        {companies.map(c => (
+          <option key={c.id} value={c.id}>{c.name}</option>
+        ))}
+      </select>
+
+      {/* Status */}
+      <select value={filters.status} onChange={e => onChange({ ...filters, status: e.target.value })}
+        className="text-xs border border-slate-200 rounded-sm px-2 py-1 text-slate-600 bg-white outline-none focus:border-teal-400 cursor-pointer">
+        <option value="">Todos os status</option>
+        <option value="pending">Pendente</option>
+        <option value="active">Ativa</option>
+        <option value="completed">Concluída</option>
+        <option value="cancelled">Cancelada</option>
+        <option value="saturated">Saturada</option>
+      </select>
+
+      {hasFilter && (
+        <button onClick={() => onChange(defaultFilters())}
+          className="text-xs text-red-500 hover:text-red-700 font-semibold ml-auto transition-colors">
+          ✕ Limpar filtros
+        </button>
+      )}
+
+      {!hasFilter && (
+        <span className="text-[10px] text-slate-300 ml-auto">Mostrando todos os dados</span>
+      )}
+    </div>
+  )
+}
+
 // ─── Transformações de dados ──────────────────────────────────────────────────
-function buildMonthlySeries(series: SeriesPoint[]) {
-  const years = [...new Set(series.map(s => s.year))].sort()
+function buildMonthlySeries(series: SeriesPoint[], selectedYears?: string[]) {
+  const years = selectedYears && selectedYears.length > 0
+    ? selectedYears
+    : [...new Set(series.map(s => s.year))].sort()
   const data = MONTHS_SHORT.map((label, i) => {
     const m = String(i + 1).padStart(2, '0')
     const obj: Record<string, number | string> = { month: label }
@@ -220,28 +359,60 @@ function buildCostAccum(costSeries: CostPoint[], byCompany: CompanyStat[]) {
   })
 }
 
+// ─── Barra de ranking animada ─────────────────────────────────────────────────
+function RankingBar({ label, value, maxValue, fmtValue, color }: {
+  label: string; value: number; maxValue: number; fmtValue: string; color: string
+}) {
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    const t = setTimeout(() => setWidth(maxValue > 0 ? (value / maxValue) * 100 : 0), 60)
+    return () => clearTimeout(t)
+  }, [value, maxValue])
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-600 w-32 shrink-0 truncate text-right">{label}</span>
+      <div className="flex-1 h-5 bg-slate-100 rounded-sm overflow-hidden">
+        <div className="h-full rounded-sm flex items-center pl-2 transition-all duration-700 ease-out"
+          style={{ width: `${width}%`, background: color, minWidth: value > 0 ? '4px' : 0 }}>
+          <span className="text-[10px] font-bold text-white whitespace-nowrap overflow-hidden">{fmtValue}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Aba: Visão Geral ─────────────────────────────────────────────────────────
-function TabGeral({ stats }: { stats: StatsData }) {
-  const { data: monthData, years } = buildMonthlySeries(stats.series_by_month)
-  const donutData = stats.by_company
+interface GeralProps {
+  stats: StatsData
+  filterKey: string
+  filteredSeries: SeriesPoint[]
+  filteredCompanies: CompanyStat[]
+  kpiTotal: number; kpiActive: number; kpiCompleted: number; kpiPending: number; kpiCost: number; kpiMessages: number
+}
+function TabGeral({ stats, filterKey, filteredSeries, filteredCompanies, kpiTotal, kpiActive, kpiCompleted, kpiPending, kpiCost, kpiMessages }: GeralProps) {
+  const selectedYears = [...new Set(filteredSeries.map(s => s.year))].sort()
+  const { data: monthData, years } = buildMonthlySeries(filteredSeries, selectedYears)
+  const donutData = filteredCompanies
     .filter(c => c.inv_count > 0)
     .sort((a, b) => b.inv_count - a.inv_count)
     .map(c => ({ name: trunc(c.name, 20), value: c.inv_count }))
 
   return (
     <>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <KpiCard label="Total de investigações" value={stats.investigations.total}  accentColor="#14b8a6" sub="todas as empresas" />
-        <KpiCard label="Ativas agora"           value={stats.investigations.active} accentColor="#0ea5e9" sub="aguardando respostas" />
-        <KpiCard label="Taxa de conclusão"      value={stats.completion_rate}       accentColor="#22c55e" format="pct" />
-        <KpiCard label="Tempo médio"            value={stats.avg_completion_hours ?? 0} accentColor="#8b5cf6" format="h" sub="até conclusão" />
-        <KpiCard label="Mensagens trocadas"     value={stats.total_messages}        accentColor="#f59e0b" />
-        <KpiCard label="Custo IA total"         value={stats.total_cost_brl}        accentColor="#ef4444" format="brl" />
+      {/* KPIs — key=filterKey força re-animação ao mudar filtro */}
+      <div key={filterKey} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        <KpiCard label="Total de investigações" value={kpiTotal}     accentColor="#14b8a6" sub="resultado dos filtros" />
+        <KpiCard label="Ativas agora"           value={kpiActive}    accentColor="#0ea5e9" sub="aguardando respostas" />
+        <KpiCard label="Concluídas"             value={kpiCompleted} accentColor="#22c55e" />
+        <KpiCard label="Pendentes"              value={kpiPending}   accentColor="#94a3b8" />
+        <KpiCard label="Mensagens trocadas"     value={kpiMessages > 0 ? kpiMessages : stats.total_messages} accentColor="#f59e0b" />
+        <KpiCard label="Custo IA"               value={kpiCost}      accentColor="#ef4444" format="brl" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
         <div className="lg:col-span-3">
-          <ChartCard title="Investigações por mês" sub="Volume criado ao longo do tempo, por ano" height={260}>
+          <ChartCard title="Investigações por mês" sub="Volume criado — filtrado pelos anos/mês selecionados" height={260}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -287,17 +458,14 @@ function TabGeral({ stats }: { stats: StatsData }) {
   )
 }
 
-// ─── Aba: Empresas ────────────────────────────────────────────────────────────
-function TabEmpresas({ stats }: { stats: StatsData }) {
-  const topByInv = [...stats.by_company]
-    .sort((a, b) => b.inv_count - a.inv_count).slice(0, 10).reverse()
-    .map(c => ({ name: trunc(c.name, 20), value: c.inv_count }))
+// ─── Aba: Empresas (ranking animado) ─────────────────────────────────────────
+function TabEmpresas({ filteredCompanies }: { filteredCompanies: CompanyStat[] }) {
+  const byInv  = [...filteredCompanies].sort((a, b) => b.inv_count - a.inv_count).slice(0, 12)
+  const byCost = [...filteredCompanies].sort((a, b) => b.cost_brl - a.cost_brl).slice(0, 12)
+  const maxInv  = Math.max(1, ...byInv.map(c => c.inv_count))
+  const maxCost = Math.max(1, ...byCost.map(c => c.cost_brl))
 
-  const topByCost = [...stats.by_company]
-    .sort((a, b) => b.cost_brl - a.cost_brl).slice(0, 10).reverse()
-    .map(c => ({ name: trunc(c.name, 20), value: Number(c.cost_brl.toFixed(2)) }))
-
-  const stackedData = stats.by_company
+  const stackedData = filteredCompanies
     .filter(c => c.inv_count > 0)
     .sort((a, b) => b.inv_count - a.inv_count)
     .slice(0, 12)
@@ -309,57 +477,72 @@ function TabEmpresas({ stats }: { stats: StatsData }) {
   return (
     <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <ChartCard title="Top empresas por investigações" sub="Quantidade total por empresa" height={Math.max(200, topByInv.length * 34 + 40)}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={topByInv} layout="vertical" margin={{ top: 0, right: 20, left: 4, bottom: 0 }}>
-              <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 10.5, fill: '#334155' }} axisLine={false} tickLine={false} width={110} />
-              <Tooltip {...tooltipStyle} formatter={(v: unknown) => [String(v) + ' investigações', '']} />
-              <Bar dataKey="value" fill="#14b8a6" radius={[0, 4, 4, 0]} maxBarSize={18} animationDuration={900}>
-                {topByInv.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
+        {/* Ranking investigações */}
+        <div className="bg-white border border-slate-200 rounded-sm p-5">
+          <p className="text-sm font-semibold text-slate-800 mb-0.5">Ranking por investigações</p>
+          <p className="text-xs text-slate-400 mb-5">Volume total por empresa</p>
+          <div className="space-y-3">
+            {byInv.length === 0
+              ? <p className="text-sm text-slate-300 text-center py-4">Sem dados</p>
+              : byInv.map((c, i) => (
+                <RankingBar key={c.id}
+                  label={trunc(c.name, 18)}
+                  value={c.inv_count}
+                  maxValue={maxInv}
+                  fmtValue={String(c.inv_count)}
+                  color={CHART_COLORS[i % CHART_COLORS.length]!}
+                />
+              ))
+            }
+          </div>
+        </div>
 
-        <ChartCard title="Top empresas por custo de IA" sub="Total gasto em R$ (api_usage_logs)" height={Math.max(200, topByCost.length * 34 + 40)}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={topByCost} layout="vertical" margin={{ top: 0, right: 20, left: 4, bottom: 0 }}>
-              <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false}
-                tickFormatter={v => 'R$' + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v.toFixed(0))} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 10.5, fill: '#334155' }} axisLine={false} tickLine={false} width={110} />
-              <Tooltip {...tooltipStyle} formatter={(v: unknown) => [fmtR$(Number(v)), '']} />
-              <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={18} animationDuration={900}>
-                {topByCost.map((_, i) => <Cell key={i} fill={CHART_COLORS[(i + 3) % CHART_COLORS.length]} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
+        {/* Ranking custo */}
+        <div className="bg-white border border-slate-200 rounded-sm p-5">
+          <p className="text-sm font-semibold text-slate-800 mb-0.5">Ranking por custo de IA</p>
+          <p className="text-xs text-slate-400 mb-5">Total gasto em R$</p>
+          <div className="space-y-3">
+            {byCost.length === 0
+              ? <p className="text-sm text-slate-300 text-center py-4">Sem dados</p>
+              : byCost.map((c, i) => (
+                <RankingBar key={c.id}
+                  label={trunc(c.name, 18)}
+                  value={c.cost_brl}
+                  maxValue={maxCost}
+                  fmtValue={fmtR$(c.cost_brl)}
+                  color={CHART_COLORS[(i + 3) % CHART_COLORS.length]!}
+                />
+              ))
+            }
+          </div>
+        </div>
       </div>
 
-      <ChartCard title="Investigações por empresa × status" sub="Composição de status por empresa (top 12)" height={Math.max(180, stackedData.length * 34 + 50)}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={stackedData} layout="vertical" margin={{ top: 0, right: 20, left: 4, bottom: 0 }}>
-            <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
-            <YAxis type="category" dataKey="name" tick={{ fontSize: 10.5, fill: '#334155' }} axisLine={false} tickLine={false} width={110} />
-            <Tooltip {...tooltipStyle} />
-            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
-            {(['Ativa','Concluída','Pendente','Cancelada'] as const).map((s, i) => (
-              <Bar key={s} dataKey={s} stackId="a" fill={['#14b8a6','#22c55e','#94a3b8','#ef4444'][i]} maxBarSize={18} animationDuration={900} />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
+      {stackedData.length > 0 && (
+        <ChartCard title="Investigações por empresa × status" sub="Composição de status por empresa (top 12)" height={Math.max(180, stackedData.length * 34 + 50)}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={stackedData} layout="vertical" margin={{ top: 0, right: 20, left: 4, bottom: 0 }}>
+              <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 10.5, fill: '#334155' }} axisLine={false} tickLine={false} width={110} />
+              <Tooltip {...tooltipStyle} />
+              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
+              {(['Ativa','Concluída','Pendente','Cancelada'] as const).map((s, i) => (
+                <Bar key={s} dataKey={s} stackId="a" fill={['#14b8a6','#22c55e','#94a3b8','#ef4444'][i]} maxBarSize={18} animationDuration={900} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      )}
     </>
   )
 }
 
 // ─── Aba: Comparativo Anual ───────────────────────────────────────────────────
-function TabComparativo({ stats }: { stats: StatsData }) {
-  const { data: monthData, years } = buildMonthlySeries(stats.series_by_month)
+function TabComparativo({ stats, filteredSeries }: { stats: StatsData; filteredSeries: SeriesPoint[] }) {
+  const { data: monthData, years } = buildMonthlySeries(filteredSeries)
   const sortedYears = [...years].sort()
   const lastTwo = sortedYears.slice(-2)
-  const yoyInv   = lastTwo.length === 2 ? calcYoY(stats.series_by_month, lastTwo[1]!, lastTwo[0]!) : null
+  const yoyInv = lastTwo.length === 2 ? calcYoY(filteredSeries, lastTwo[1]!, lastTwo[0]!) : null
 
   const costByYear: Record<string, number> = {}
   stats.cost_series.forEach(p => {
@@ -368,22 +551,23 @@ function TabComparativo({ stats }: { stats: StatsData }) {
   })
   const costYears = Object.keys(costByYear).sort()
   const yoyCost = costYears.length >= 2
-    ? costYears.slice(-2).reduce<number | null>((_, __, ___, arr) => {
-        const prev = costByYear[arr[0]!] ?? 0; const curr = costByYear[arr[1]!] ?? 0
+    ? (() => {
+        const prev = costByYear[costYears.at(-2)!] ?? 0
+        const curr = costByYear[costYears.at(-1)!] ?? 0
         return prev === 0 ? null : (curr - prev) / prev * 100
-      }, null)
+      })()
     : null
 
   return (
     <>
       {lastTwo.length >= 2 && (
         <div className="flex gap-4 mb-5 flex-wrap">
-          <GrowthBadge pct={yoyInv} label={`Investigações ${lastTwo[0]} → ${lastTwo[1]}`} />
+          <GrowthBadge pct={yoyInv}  label={`Investigações ${lastTwo[0]} → ${lastTwo[1]}`} />
           <GrowthBadge pct={yoyCost} label={`Custo IA ${costYears.slice(-2)[0]} → ${costYears.slice(-2)[1]}`} />
         </div>
       )}
 
-      <ChartCard title="Investigações criadas por mês — comparativo" sub="Todos os anos lado a lado · não afetado por filtros" height={300}>
+      <ChartCard title="Investigações criadas por mês — comparativo" sub="Anos lado a lado" height={300}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={monthData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -414,7 +598,7 @@ function TabComparativo({ stats }: { stats: StatsData }) {
               </thead>
               <tbody>
                 {sortedYears.map(year => {
-                  const invCount = stats.series_by_month.filter(s => s.year === year).reduce((a, s) => a + s.count, 0)
+                  const invCount = filteredSeries.filter(s => s.year === year).reduce((a, s) => a + s.count, 0)
                   const costSum  = costByYear[year] ?? 0
                   return (
                     <tr key={year} className="border-b border-slate-50 hover:bg-slate-50">
@@ -476,7 +660,6 @@ function TabPlanos({ stats }: { stats: StatsData }) {
 
   return (
     <>
-      {/* Configuração dos planos */}
       <div className="mb-6">
         <p className="text-sm font-semibold text-slate-800 mb-1">Configuração dos planos</p>
         <p className="text-xs text-slate-400 mb-4">Use -1 para ilimitado em qualquer campo</p>
@@ -530,7 +713,7 @@ function TabPlanos({ stats }: { stats: StatsData }) {
                       <input type="number" value={form.max_questions_per_worker}
                         onChange={e => setForm(f => ({ ...f, max_questions_per_worker: Number(e.target.value) }))}
                         className="w-full border border-slate-200 rounded-sm px-3 py-1.5 text-sm" />
-                      <p className="text-[10px] text-slate-400 mt-1">ATÉ N perguntas por worker — a saturação natural prevalece se atingida antes</p>
+                      <p className="text-[10px] text-slate-400 mt-1">ATÉ N perguntas — a saturação natural prevalece se atingida antes</p>
                     </div>
                     <div className="flex gap-2 pt-1">
                       <button onClick={saveEdit} disabled={saving}
@@ -565,42 +748,31 @@ function TabPlanos({ stats }: { stats: StatsData }) {
         </div>
       </div>
 
-      {/* Uso por empresa */}
       <p className="text-sm font-semibold text-slate-800 mb-1">Uso por empresa</p>
       <p className="text-xs text-slate-400 mb-4">Consumo atual vs limite do plano contratado</p>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {stats.plan_usage.map(pu => {
-          const invPct = pu.max_investigations === -1 ? -1 : Math.min(100, (pu.inv_count / pu.max_investigations) * 100)
-          const costPct = pu.max_cost_brl === -1 ? -1 : Math.min(100, (pu.cost_brl / pu.max_cost_brl) * 100)
-          const isWarning = invPct >= 80 || costPct >= 80
-          const isOver    = invPct >= 100 || costPct >= 100
-          return (
-            <div key={pu.company_id} className={`bg-white border rounded-sm p-4 ${isOver ? 'border-red-300' : isWarning ? 'border-amber-300' : 'border-slate-200'}`}>
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <Link href={`/admin/companies/${pu.company_id}`} className="text-sm font-semibold text-slate-800 hover:text-teal-700 transition-colors">
-                    {pu.company_name}
-                  </Link>
-                  {isOver    && <span className="ml-2 text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded uppercase">Limite atingido</span>}
-                  {isWarning && !isOver && <span className="ml-2 text-[9px] font-bold bg-amber-400 text-white px-1.5 py-0.5 rounded uppercase">Alerta</span>}
-                </div>
+        {stats.plan_usage.map(pu => (
+          <div key={pu.company_id} className="bg-white border border-slate-200 rounded-sm p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{pu.company_name}</p>
                 <PlanBadge plan={pu.plan} />
               </div>
-              <div className="space-y-3">
-                <UsageBar
-                  used={pu.inv_count}
-                  max={pu.max_investigations}
-                  label={`${pu.inv_count} investigações${pu.max_investigations !== -1 ? ` de ${pu.max_investigations}` : ''}`}
-                />
-                <UsageBar
-                  used={Number(pu.cost_brl.toFixed(2))}
-                  max={pu.max_cost_brl}
-                  label={`${fmtR$(pu.cost_brl)}${pu.max_cost_brl !== -1 ? ` de ${fmtR$(pu.max_cost_brl)}` : ''}`}
-                />
-              </div>
             </div>
-          )
-        })}
+            <div className="space-y-2.5">
+              <UsageBar
+                used={pu.inv_count}
+                max={pu.max_investigations}
+                label={`${pu.inv_count} investigações${pu.max_investigations !== -1 ? ` de ${pu.max_investigations}` : ''}`}
+              />
+              <UsageBar
+                used={Number(pu.cost_brl.toFixed(2))}
+                max={pu.max_cost_brl}
+                label={`${fmtR$(pu.cost_brl)}${pu.max_cost_brl !== -1 ? ` de ${fmtR$(pu.max_cost_brl)}` : ''}`}
+              />
+            </div>
+          </div>
+        ))}
         {stats.plan_usage.length === 0 && (
           <div className="col-span-3 text-center py-10 text-sm text-slate-300">Nenhuma empresa cadastrada</div>
         )}
@@ -614,12 +786,10 @@ function TabAvancado({ stats }: { stats: StatsData }) {
   const heatmap = buildHeatmap(stats.messages_by_month)
   const costAccumData = buildCostAccum(stats.cost_series, stats.by_company)
   const top5Names = stats.by_company.slice(0, 5).map(c => trunc(c.name, 14))
-
   const confMax = Math.max(1, ...stats.confidence_distribution.map(d => d.count))
 
   return (
     <>
-      {/* Score médio */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <div className="bg-white border border-slate-200 rounded-sm p-5 relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-violet-500" />
@@ -657,7 +827,6 @@ function TabAvancado({ stats }: { stats: StatsData }) {
         </div>
       </div>
 
-      {/* Mapa de calor */}
       <div className="bg-white border border-slate-200 rounded-sm p-5 mb-4">
         <p className="text-sm font-semibold text-slate-800 mb-0.5">Mapa de calor — mensagens por mês</p>
         <p className="text-xs text-slate-400 mb-4">Volume de mensagens trocadas (inbound + outbound)</p>
@@ -691,7 +860,6 @@ function TabAvancado({ stats }: { stats: StatsData }) {
         }
       </div>
 
-      {/* Custo acumulado */}
       <ChartCard title="Custo acumulado de IA por empresa" sub="Top 5 empresas — evolução ao longo do tempo (R$)" height={280}>
         {costAccumData.length === 0
           ? <div className="flex items-center justify-center h-full text-sm text-slate-300">Sem dados de custo</div>
@@ -700,7 +868,7 @@ function TabAvancado({ stats }: { stats: StatsData }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={50}
-                  tickFormatter={v => v >= 1000 ? 'R$' + (v / 1000).toFixed(1) + 'k' : 'R$' + v.toFixed(0)} />
+                  tickFormatter={v => v >= 1000 ? 'R$' + (v / 1000).toFixed(1) + 'k' : 'R$' + (v as number).toFixed(0)} />
                 <Tooltip {...tooltipStyle} formatter={(v: unknown) => [fmtR$(Number(v)), '']} />
                 <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10 }} />
                 {top5Names.map((name, i) => (
@@ -715,50 +883,136 @@ function TabAvancado({ stats }: { stats: StatsData }) {
   )
 }
 
-// ─── Aba: Feed Recente ────────────────────────────────────────────────────────
-function TabFeed({ stats }: { stats: StatsData }) {
-  const [search, setSearch] = useState('')
-  const filtered = stats.recent_investigations.filter(inv =>
-    !search || inv.title.toLowerCase().includes(search.toLowerCase()) || inv.company_name.toLowerCase().includes(search.toLowerCase())
-  )
+// ─── Aba: Feed & Tabela Dinâmica ──────────────────────────────────────────────
+type SortField = 'created_at' | 'status' | 'company_name' | 'title'
+type SortDir   = 'asc' | 'desc'
+
+function TabFeed({ filteredInvestigations }: { filteredInvestigations: RecentInv[] }) {
+  const [search, setSearch]       = useState('')
+  const [sortField, setSortField] = useState<SortField>('created_at')
+  const [sortDir, setSortDir]     = useState<SortDir>('desc')
+  const [page, setPage]           = useState(1)
+  const PAGE_SIZE = 15
+
+  function handleSort(field: SortField) {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
+    setPage(1)
+  }
+
+  const searched = useMemo(() => {
+    if (!search.trim()) return filteredInvestigations
+    const q = search.toLowerCase()
+    return filteredInvestigations.filter(inv =>
+      inv.title.toLowerCase().includes(q) ||
+      inv.company_name.toLowerCase().includes(q) ||
+      (STATUS_LABELS[inv.status] ?? inv.status).toLowerCase().includes(q)
+    )
+  }, [filteredInvestigations, search])
+
+  const sorted = useMemo(() => {
+    return [...searched].sort((a, b) => {
+      let cmp = 0
+      if (sortField === 'created_at') cmp = a.created_at.localeCompare(b.created_at)
+      else if (sortField === 'status') cmp = a.status.localeCompare(b.status)
+      else if (sortField === 'company_name') cmp = a.company_name.localeCompare(b.company_name)
+      else if (sortField === 'title') cmp = a.title.localeCompare(b.title)
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [searched, sortField, sortDir])
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const paged = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  // Reset page when search/filter changes
+  useEffect(() => { setPage(1) }, [search, filteredInvestigations])
+
+  function SortIcon({ field }: { field: SortField }) {
+    if (sortField !== field) return <span className="text-slate-300 ml-1">↕</span>
+    return <span className="text-teal-500 ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
+  }
+
+  const headers: { label: string; field: SortField | null }[] = [
+    { label: 'Empresa',  field: 'company_name' },
+    { label: 'Título',   field: 'title'        },
+    { label: 'Status',   field: 'status'       },
+    { label: 'Criada em',field: 'created_at'   },
+    { label: '',         field: null           },
+  ]
+
   return (
     <div className="bg-white border border-slate-200 rounded-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <p className="text-sm font-semibold text-slate-800">Investigações recentes</p>
-          <p className="text-xs text-slate-400 mt-0.5">Últimas 30 criadas na plataforma</p>
+          <p className="text-sm font-semibold text-slate-800">Investigações</p>
+          <p className="text-xs text-slate-400 mt-0.5">{sorted.length} resultado(s) · página {page} de {totalPages}</p>
         </div>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por título ou empresa…"
-          className="text-sm border border-slate-200 rounded-sm px-3 py-1.5 w-64 outline-none focus:border-teal-400 transition-colors" />
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por título, empresa ou status…"
+          className="text-sm border border-slate-200 rounded-sm px-3 py-1.5 w-72 outline-none focus:border-teal-400 transition-colors" />
       </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-100">
-              {['Empresa','Título','Status','Criada em',''].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold tracking-widest text-slate-400 uppercase">{h}</th>
+            <tr className="border-b border-slate-100 bg-slate-50">
+              {headers.map(h => (
+                <th key={h.label}
+                  className={`text-left px-4 py-3 text-[10px] font-semibold tracking-widest text-slate-400 uppercase select-none
+                    ${h.field ? 'cursor-pointer hover:text-slate-600' : ''}`}
+                  onClick={() => h.field && handleSort(h.field)}>
+                  {h.label}{h.field && <SortIcon field={h.field} />}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.map(inv => (
+            {paged.map(inv => (
               <tr key={inv.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3 text-slate-600">{inv.company_name}</td>
+                <td className="px-4 py-3 text-slate-600 text-xs">{inv.company_name}</td>
                 <td className="px-4 py-3 font-medium text-slate-900 max-w-xs">
                   <span className="line-clamp-1">{inv.title}</span>
                 </td>
                 <td className="px-4 py-3"><StatusBadge status={inv.status} /></td>
                 <td className="px-4 py-3 text-slate-500 text-xs font-mono">{fmtDate(inv.created_at)}</td>
                 <td className="px-4 py-3">
-                  <Link href={`/admin/investigations`} className="text-xs text-teal-600 hover:underline">Ver</Link>
+                  <Link href="/admin/investigations" className="text-xs text-teal-600 hover:underline">Ver</Link>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {filtered.length === 0 && (
+        {paged.length === 0 && (
           <p className="text-center text-sm text-slate-300 py-10">Nenhuma investigação encontrada</p>
         )}
+      </div>
+
+      {/* Paginação */}
+      <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-xs text-slate-400">
+          {sorted.length === 0 ? 'Nenhum resultado' : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, sorted.length)} de ${sorted.length}`}
+        </span>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setPage(1)} disabled={page <= 1}
+            className="text-xs px-2 py-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed">
+            ««
+          </button>
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+            className="text-xs px-2.5 py-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed">
+            ‹ Anterior
+          </button>
+          <span className="text-xs px-3 py-1 bg-teal-50 border border-teal-200 rounded text-teal-700 font-semibold">
+            {page} / {totalPages}
+          </span>
+          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+            className="text-xs px-2.5 py-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed">
+            Próxima ›
+          </button>
+          <button onClick={() => setPage(totalPages)} disabled={page >= totalPages}
+            className="text-xs px-2 py-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed">
+            »»
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -786,10 +1040,11 @@ function Skeleton() {
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function AdminPage() {
-  const [stats, setStats]   = useState<StatsData | null>(null)
-  const [error, setError]   = useState<string | null>(null)
-  const [tab, setTab]       = useState<Tab>('geral')
+  const [stats, setStats]     = useState<StatsData | null>(null)
+  const [error, setError]     = useState<string | null>(null)
+  const [tab, setTab]         = useState<Tab>('geral')
   const [mounted, setMounted] = useState(false)
+  const [filters, setFilters] = useState<Filters>(defaultFilters())
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -805,10 +1060,21 @@ export default function AdminPage() {
 
   useEffect(() => { load() }, [load])
 
+  const filteredData = useFilteredData(stats ?? {
+    companies_count: 0, managers_count: 0, workers_count: 0, total_messages: 0,
+    investigations: { total: 0, active: 0, completed: 0, pending: 0, cancelled: 0, saturated: 0 },
+    completion_rate: 0, avg_completion_hours: null, workers_saturated: 0, workers_unresponsive: 0,
+    total_cost_brl: 0, total_cost_usd: 0, this_month_cost_brl: 0,
+    series_by_month: [], messages_by_month: [], by_company: [], cost_series: [],
+    avg_confidence_score: null, confidence_distribution: [], recent_investigations: [], plan_usage: [],
+  }, filters)
+
+  const filterKey = JSON.stringify(filters)
+
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
+      <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Overview</h1>
           <p className="text-sm text-slate-500 mt-0.5">Business Intelligence da plataforma</p>
@@ -820,9 +1086,14 @@ export default function AdminPage() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-sm px-4 py-3 text-sm text-red-700 mb-6">
+        <div className="bg-red-50 border border-red-200 rounded-sm px-4 py-3 text-sm text-red-700 mb-5">
           {error} — <a href="/login" className="underline">Fazer login novamente</a>
         </div>
+      )}
+
+      {/* Filtro global — sempre visível quando dados carregados */}
+      {stats && mounted && (
+        <FilterBar stats={stats} filters={filters} onChange={setFilters} />
       )}
 
       {/* Tab bar */}
@@ -840,12 +1111,31 @@ export default function AdminPage() {
 
       {stats && mounted && (
         <>
-          {tab === 'geral'       && <TabGeral       stats={stats} />}
-          {tab === 'empresas'    && <TabEmpresas    stats={stats} />}
-          {tab === 'comparativo' && <TabComparativo stats={stats} />}
-          {tab === 'planos'      && <TabPlanos      stats={stats} />}
-          {tab === 'avancado'    && <TabAvancado    stats={stats} />}
-          {tab === 'feed'        && <TabFeed        stats={stats} />}
+          {tab === 'geral' && (
+            <TabGeral
+              stats={stats}
+              filterKey={filterKey}
+              filteredSeries={filteredData.filteredSeries}
+              filteredCompanies={filteredData.filteredCompanies}
+              kpiTotal={filteredData.kpiTotal}
+              kpiActive={filteredData.kpiActive}
+              kpiCompleted={filteredData.kpiCompleted}
+              kpiPending={filteredData.kpiPending}
+              kpiCost={filteredData.kpiCost}
+              kpiMessages={filteredData.kpiMessages}
+            />
+          )}
+          {tab === 'empresas' && (
+            <TabEmpresas filteredCompanies={filteredData.filteredCompanies} />
+          )}
+          {tab === 'comparativo' && (
+            <TabComparativo stats={stats} filteredSeries={filteredData.filteredSeries} />
+          )}
+          {tab === 'planos' && <TabPlanos stats={stats} />}
+          {tab === 'avancado' && <TabAvancado stats={stats} />}
+          {tab === 'feed' && (
+            <TabFeed filteredInvestigations={filteredData.filteredInvestigations} />
+          )}
         </>
       )}
     </div>
