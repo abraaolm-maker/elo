@@ -208,6 +208,29 @@ export async function GET(request: Request) {
   // Colunas em reports
   results.push(await runSafe(`ALTER TABLE reports ADD COLUMN confidence_justification TEXT`, 'reports.confidence_justification'))
 
+  // Tabela plan_configs
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS plan_configs (
+      plan               TEXT PRIMARY KEY,
+      label              TEXT NOT NULL,
+      max_investigations INTEGER NOT NULL DEFAULT -1,
+      max_cost_brl       REAL NOT NULL DEFAULT -1,
+      updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'tabela plan_configs'))
+
+  // Seeds dos planos padrão (INSERT OR IGNORE = não sobrescreve se admin tiver editado)
+  for (const p of [
+    { plan: 'starter',    label: 'Starter',    max_inv: 5,  max_cost: 50 },
+    { plan: 'pro',        label: 'Pro',         max_inv: 30, max_cost: 300 },
+    { plan: 'enterprise', label: 'Enterprise',  max_inv: -1, max_cost: -1 },
+  ]) {
+    results.push(await runSafe(
+      `INSERT OR IGNORE INTO plan_configs (plan, label, max_investigations, max_cost_brl) VALUES ('${p.plan}', '${p.label}', ${p.max_inv}, ${p.max_cost})`,
+      `plan_config.${p.plan}`
+    ))
+  }
+
   // Criar admin
   try {
     const bcrypt = await import('bcryptjs')

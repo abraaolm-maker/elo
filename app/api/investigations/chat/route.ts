@@ -280,6 +280,39 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if (prontoAgora && draftComUpdates.titulo && draftComUpdates.descricao_problema && draftComUpdates.participantes.length > 0) {
+      // Verificar limites do plano antes de criar
+      try {
+        const company = await db.select().from(schema.companies).where(eq(schema.companies.id, session.companyId)).get()
+        if (company) {
+          const planCfg = await db.select().from(schema.plan_configs).where(eq(schema.plan_configs.plan, company.plan)).get()
+          if (planCfg) {
+            if (planCfg.max_investigations !== -1) {
+              const [invCount] = await db.select({ total: count() }).from(schema.investigations).where(eq(schema.investigations.company_id, session.companyId))
+              if ((invCount?.total ?? 0) >= planCfg.max_investigations) {
+                return Response.json({
+                  ok: true,
+                  message: `Sua empresa atingiu o limite de ${planCfg.max_investigations} investigações do plano ${planCfg.label}. Entre em contato com o suporte para fazer upgrade.`,
+                  draft: draftComUpdates,
+                  investigationId: null,
+                })
+              }
+            }
+            if (planCfg.max_cost_brl !== -1) {
+              const { sum } = await import('drizzle-orm')
+              const [costRow] = await db.select({ total: sum(schema.api_usage_logs.cost_brl) }).from(schema.api_usage_logs).where(eq(schema.api_usage_logs.company_id, session.companyId))
+              if (Number(costRow?.total ?? 0) >= planCfg.max_cost_brl) {
+                return Response.json({
+                  ok: true,
+                  message: `Sua empresa atingiu o limite de custo de IA (R$ ${planCfg.max_cost_brl.toFixed(2)}) do plano ${planCfg.label}. Entre em contato com o suporte para fazer upgrade.`,
+                  draft: draftComUpdates,
+                  investigationId: null,
+                })
+              }
+            }
+          }
+        }
+      } catch { /* se plan_configs não existir, não bloqueia */ }
+
       investigationId = crypto.randomUUID()
 
       let investigationContextJson: string | null = null

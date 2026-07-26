@@ -123,6 +123,17 @@ export const action_items = sqliteTable('action_items', {
   created_at:           text('created_at').notNull().default(sql`(datetime('now'))`),
 })
 
+// ─── PLAN_CONFIGS ─────────────────────────────────────────────────────────────
+export const plan_configs = sqliteTable('plan_configs', {
+  plan:               text('plan').primaryKey(),     // 'starter' | 'pro' | 'enterprise'
+  label:              text('label').notNull(),
+  max_investigations: integer('max_investigations').notNull().default(-1), // -1 = ilimitado
+  max_cost_brl:       real('max_cost_brl').notNull().default(-1),          // -1 = ilimitado
+  updated_at:         text('updated_at').notNull().default(sql`(datetime('now'))`),
+})
+export type PlanConfig    = typeof plan_configs.$inferSelect
+export type NewPlanConfig = typeof plan_configs.$inferInsert
+
 // ─── API_USAGE_LOGS ───────────────────────────────────────────────────────────
 export const api_usage_logs = sqliteTable('api_usage_logs', {
   id:               text('id').primaryKey(),
