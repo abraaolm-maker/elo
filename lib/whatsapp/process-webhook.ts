@@ -237,6 +237,15 @@ export async function processInboundMessage({
 
   const managerNotes = iw.manager_notes ?? ''
 
+  // Buscar limite de perguntas do plano da empresa
+  const planCfgWh = await db
+    .select({ max_questions_per_worker: schema.plan_configs.max_questions_per_worker })
+    .from(schema.companies)
+    .innerJoin(schema.plan_configs, eq(schema.companies.plan, schema.plan_configs.plan))
+    .where(eq(schema.companies.id, investigation.company_id))
+    .get()
+  const maxQuestionsPerWorker = planCfgWh?.max_questions_per_worker ?? -1
+
   let engineOutput
   try {
     engineOutput = await runInvestigationEngine({
@@ -248,6 +257,7 @@ export async function processInboundMessage({
       pendingValidations,
       managerNotes,
       investigationContext,
+      maxQuestionsPerWorker,
     })
   } catch (error) {
     console.error('[process-webhook] investigation engine error', error)

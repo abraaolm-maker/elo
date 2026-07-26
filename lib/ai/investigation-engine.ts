@@ -72,9 +72,9 @@ async function callClaude(
   client: Anthropic,
   input: InvestigationEngineInput
 ): Promise<Anthropic.Message> {
-  const systemPrompt = buildInvestigationEnginePrompt(input.investigationContext)
-  // Não enviar investigationContext no payload ao Claude (já está no system prompt)
-  const { investigationContext: _ctx, ...payload } = input
+  const systemPrompt = buildInvestigationEnginePrompt(input.investigationContext, input.maxQuestionsPerWorker)
+  // Não enviar investigationContext nem maxQuestionsPerWorker no payload (já estão no system prompt)
+  const { investigationContext: _ctx, maxQuestionsPerWorker: _mq, ...payload } = input
   return client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 1024,

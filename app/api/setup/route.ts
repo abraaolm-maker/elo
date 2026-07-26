@@ -211,25 +211,37 @@ export async function GET(request: Request) {
   // Tabela plan_configs
   results.push(await runSafe(`
     CREATE TABLE IF NOT EXISTS plan_configs (
-      plan               TEXT PRIMARY KEY,
-      label              TEXT NOT NULL,
-      max_investigations INTEGER NOT NULL DEFAULT -1,
-      max_cost_brl       REAL NOT NULL DEFAULT -1,
-      updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
+      plan                     TEXT PRIMARY KEY,
+      label                    TEXT NOT NULL,
+      max_investigations        INTEGER NOT NULL DEFAULT -1,
+      max_cost_brl              REAL NOT NULL DEFAULT -1,
+      max_questions_per_worker  INTEGER NOT NULL DEFAULT -1,
+      updated_at               TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `, 'tabela plan_configs'))
 
+  // Migração para adicionar coluna em bancos existentes
+  results.push(await runSafe(
+    `ALTER TABLE plan_configs ADD COLUMN max_questions_per_worker INTEGER NOT NULL DEFAULT -1`,
+    'plan_configs.max_questions_per_worker'
+  ))
+
   // Seeds dos planos padrão (INSERT OR IGNORE = não sobrescreve se admin tiver editado)
   for (const p of [
-    { plan: 'starter',    label: 'Starter',    max_inv: 5,  max_cost: 50 },
-    { plan: 'pro',        label: 'Pro',         max_inv: 30, max_cost: 300 },
-    { plan: 'enterprise', label: 'Enterprise',  max_inv: -1, max_cost: -1 },
+    { plan: 'starter',    label: 'Starter',    max_inv: 5,  max_cost: 50,  max_q: 5  },
+    { plan: 'pro',        label: 'Pro',         max_inv: 30, max_cost: 300, max_q: 10 },
+    { plan: 'enterprise', label: 'Enterprise',  max_inv: -1, max_cost: -1,  max_q: 20 },
   ]) {
     results.push(await runSafe(
-      `INSERT OR IGNORE INTO plan_configs (plan, label, max_investigations, max_cost_brl) VALUES ('${p.plan}', '${p.label}', ${p.max_inv}, ${p.max_cost})`,
+      `INSERT OR IGNORE INTO plan_configs (plan, label, max_investigations, max_cost_brl, max_questions_per_worker) VALUES ('${p.plan}', '${p.label}', ${p.max_inv}, ${p.max_cost}, ${p.max_q})`,
       `plan_config.${p.plan}`
     ))
   }
+
+  // Atualizar planos existentes que ainda têm max_questions_per_worker = -1 (padrão antigo)
+  results.push(await runSafe(`UPDATE plan_configs SET max_questions_per_worker = 5  WHERE plan = 'starter'    AND max_questions_per_worker = -1`, 'plan_config.starter.max_q'))
+  results.push(await runSafe(`UPDATE plan_configs SET max_questions_per_worker = 10 WHERE plan = 'pro'        AND max_questions_per_worker = -1`, 'plan_config.pro.max_q'))
+  results.push(await runSafe(`UPDATE plan_configs SET max_questions_per_worker = 20 WHERE plan = 'enterprise' AND max_questions_per_worker = -1`, 'plan_config.enterprise.max_q'))
 
   // Criar admin
   try {

@@ -79,6 +79,15 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
       try { investigationContext = JSON.parse(investigation.investigation_context) as InvestigationContext } catch { /* usa null */ }
     }
 
+    // Buscar limite de perguntas do plano da empresa (uma vez para todos os workers)
+    const planCfgStart = await db
+      .select({ max_questions_per_worker: schema.plan_configs.max_questions_per_worker })
+      .from(schema.companies)
+      .innerJoin(schema.plan_configs, eq(schema.companies.plan, schema.plan_configs.plan))
+      .where(eq(schema.companies.id, investigation.company_id))
+      .get()
+    const maxQuestionsPerWorker = planCfgStart?.max_questions_per_worker ?? -1
+
     // Para cada worker: gerar primeira pergunta via IA e enviar via WhatsApp
     const sendFirstQuestion = async (iw: typeof iwRows[number]): Promise<void> => {
       let engineOutput
@@ -92,6 +101,7 @@ export async function POST(_request: Request, { params }: RouteParams): Promise<
           pendingValidations: [],
           managerNotes: iw.manager_notes ?? '',
           investigationContext,
+          maxQuestionsPerWorker,
           companyId: investigation.company_id,
           managerId: investigation.manager_id,
           investigationId: id,

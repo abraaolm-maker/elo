@@ -30,6 +30,7 @@ export interface InvestigationEngineInput {
   pendingValidations: string[]  // hints gerados por outros workers (o que precisa ser confirmado)
   managerNotes: string
   investigationContext?: InvestigationContext | null
+  maxQuestionsPerWorker?: number  // limite de perguntas por worker por investigação (-1 = ilimitado)
   // rastreamento de custos
   companyId?: string
   managerId?: string

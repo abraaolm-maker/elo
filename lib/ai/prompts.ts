@@ -1,5 +1,15 @@
 import type { InvestigationContext } from './types'
 
+function buildQuestionLimitRule(maxQuestions: number | undefined): string {
+  if (!maxQuestions || maxQuestions === -1) return ''
+  return `
+12. LIMITE DE PERGUNTAS — Esta investigação permite no máximo ${maxQuestions} pergunta(s) por worker.
+    - Você pode verificar quantas perguntas já foram feitas contando as mensagens "outbound" em messageHistory.
+    - Se já atingiu o limite: defina action = "mark_saturated", mesmo que a saturação não seja perfeita.
+    - Se ainda tem perguntas disponíveis: use-as com sabedoria. Priorize as que trarão mais informação nova.
+    - Saturação natural (score ≥ 86) sempre prevalece sobre o limite — se o worker saturou antes, pare antes.`
+}
+
 const BASE_ENGINE_RULES = `
 Você deve retornar APENAS um objeto JSON válido. Nenhum texto antes ou depois. Nenhum bloco de markdown. Apenas o JSON puro.
 
@@ -52,9 +62,15 @@ Você receberá um JSON com:
 
 11. JSON PURO — Nenhum texto fora do JSON. Nenhum bloco markdown.`
 
-export function buildInvestigationEnginePrompt(context?: InvestigationContext | null): string {
+export function buildInvestigationEnginePrompt(
+  context?: InvestigationContext | null,
+  maxQuestionsPerWorker?: number
+): string {
+  const limitRule = buildQuestionLimitRule(maxQuestionsPerWorker)
+  const rules = BASE_ENGINE_RULES + limitRule
+
   if (!context) {
-    return `Você é o engine de investigação do sistema Elo. Sua função é conduzir entrevistas via WhatsApp com trabalhadores para descobrir a causa raiz de problemas operacionais em empresas brasileiras.\n${BASE_ENGINE_RULES}`
+    return `Você é o engine de investigação do sistema Elo. Sua função é conduzir entrevistas via WhatsApp com trabalhadores para descobrir a causa raiz de problemas operacionais em empresas brasileiras.\n${rules}`
   }
 
   const langSection = Object.entries(context.language_guidelines)
@@ -80,7 +96,7 @@ ${langSection}
 Aspectos específicos deste domínio que devem ser investigados proativamente:
 ${probesSection}
 
-${BASE_ENGINE_RULES}`
+${rules}`
 }
 
 export const REPORT_GENERATOR_SYSTEM_PROMPT = `Você é o gerador de relatórios do sistema Elo. Sua função é analisar todas as conversas de uma investigação e produzir um relatório estruturado de causa raiz.

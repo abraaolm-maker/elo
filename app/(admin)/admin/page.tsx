@@ -436,9 +436,9 @@ function TabComparativo({ stats }: { stats: StatsData }) {
 // ─── Aba: Planos & Limites ────────────────────────────────────────────────────
 function TabPlanos({ stats }: { stats: StatsData }) {
   const [editing, setEditing] = useState<string | null>(null)
-  const [configs, setConfigs] = useState<{ plan: string; label: string; max_investigations: number; max_cost_brl: number }[]>([])
+  const [configs, setConfigs] = useState<{ plan: string; label: string; max_investigations: number; max_cost_brl: number; max_questions_per_worker: number }[]>([])
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ max_investigations: 0, max_cost_brl: 0 })
+  const [form, setForm] = useState({ max_investigations: 0, max_cost_brl: 0, max_questions_per_worker: 0 })
 
   useEffect(() => {
     fetch('/api/admin/plans')
@@ -450,7 +450,7 @@ function TabPlanos({ stats }: { stats: StatsData }) {
   function startEdit(plan: string) {
     const cfg = configs.find(c => c.plan === plan)
     if (!cfg) return
-    setForm({ max_investigations: cfg.max_investigations, max_cost_brl: cfg.max_cost_brl })
+    setForm({ max_investigations: cfg.max_investigations, max_cost_brl: cfg.max_cost_brl, max_questions_per_worker: cfg.max_questions_per_worker })
     setEditing(plan)
   }
 
@@ -493,6 +493,8 @@ function TabPlanos({ stats }: { stats: StatsData }) {
                       {cfg.max_investigations === -1 ? 'Investigações ilimitadas' : `Até ${cfg.max_investigations} investigações`}
                       {' · '}
                       {cfg.max_cost_brl === -1 ? 'Custo ilimitado' : `R$ ${cfg.max_cost_brl} limite`}
+                      {' · '}
+                      {cfg.max_questions_per_worker === -1 ? 'Perguntas ilimitadas/worker' : `Até ${cfg.max_questions_per_worker} perguntas/worker`}
                     </p>
                   </div>
                   {!isEdit && (
@@ -521,6 +523,15 @@ function TabPlanos({ stats }: { stats: StatsData }) {
                         onChange={e => setForm(f => ({ ...f, max_cost_brl: Number(e.target.value) }))}
                         className="w-full border border-slate-200 rounded-sm px-3 py-1.5 text-sm" />
                     </div>
+                    <div>
+                      <label className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase block mb-1">
+                        Máx. perguntas por worker (por investigação) — -1 = ilimitado
+                      </label>
+                      <input type="number" value={form.max_questions_per_worker}
+                        onChange={e => setForm(f => ({ ...f, max_questions_per_worker: Number(e.target.value) }))}
+                        className="w-full border border-slate-200 rounded-sm px-3 py-1.5 text-sm" />
+                      <p className="text-[10px] text-slate-400 mt-1">ATÉ N perguntas por worker — a saturação natural prevalece se atingida antes</p>
+                    </div>
                     <div className="flex gap-2 pt-1">
                       <button onClick={saveEdit} disabled={saving}
                         className="flex-1 bg-teal-600 text-white text-xs font-semibold py-1.5 rounded-sm hover:bg-teal-700 disabled:opacity-50">
@@ -541,6 +552,10 @@ function TabPlanos({ stats }: { stats: StatsData }) {
                     <div className="flex justify-between text-xs mt-1">
                       <span className={`font-semibold ${colors.text}`}>Custo máx.</span>
                       <span className="text-slate-600">{cfg.max_cost_brl === -1 ? '∞' : fmtR$(cfg.max_cost_brl)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs mt-1">
+                      <span className={`font-semibold ${colors.text}`}>Perguntas/worker</span>
+                      <span className="text-slate-600">{cfg.max_questions_per_worker === -1 ? '∞' : cfg.max_questions_per_worker}</span>
                     </div>
                   </div>
                 )}

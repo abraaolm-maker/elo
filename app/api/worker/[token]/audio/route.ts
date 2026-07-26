@@ -122,6 +122,15 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     try { investigationContext = JSON.parse(iw.investigation_context) as InvestigationContext } catch { /* usa null */ }
   }
 
+  // Buscar limite de perguntas do plano da empresa
+  const planCfgAudio = await db
+    .select({ max_questions_per_worker: schema.plan_configs.max_questions_per_worker })
+    .from(schema.companies)
+    .innerJoin(schema.plan_configs, eq(schema.companies.plan, schema.plan_configs.plan))
+    .where(eq(schema.companies.id, iw.company_id))
+    .get()
+  const maxQuestionsPerWorker = planCfgAudio?.max_questions_per_worker ?? -1
+
   const engineOutput = await runInvestigationEngine({
     problemDescription: iw.problem_description,
     workerRole: iw.worker_role,
@@ -131,6 +140,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     pendingValidations,
     managerNotes: iw.manager_notes ?? '',
     investigationContext,
+    maxQuestionsPerWorker,
     companyId: iw.company_id,
     managerId: iw.manager_id,
     investigationId: iw.investigation_id,

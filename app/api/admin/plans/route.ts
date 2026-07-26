@@ -19,14 +19,13 @@ export async function PUT(request: Request) {
   try {
     await requireAdmin(request)
 
-    const body = await request.json() as {
+    const { plan, max_investigations, max_cost_brl, max_questions_per_worker, label } = await request.json() as {
       plan: string
       max_investigations: number
       max_cost_brl: number
+      max_questions_per_worker: number
       label?: string
     }
-
-    const { plan, max_investigations, max_cost_brl, label } = body
 
     if (!plan) return Response.json({ error: 'plan obrigatório' }, { status: 400 })
 
@@ -35,6 +34,7 @@ export async function PUT(request: Request) {
       .set({
         max_investigations,
         max_cost_brl,
+        max_questions_per_worker,
         ...(label ? { label } : {}),
         updated_at: new Date().toISOString(),
       })

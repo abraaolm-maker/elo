@@ -125,11 +125,12 @@ export const action_items = sqliteTable('action_items', {
 
 // ─── PLAN_CONFIGS ─────────────────────────────────────────────────────────────
 export const plan_configs = sqliteTable('plan_configs', {
-  plan:               text('plan').primaryKey(),     // 'starter' | 'pro' | 'enterprise'
-  label:              text('label').notNull(),
-  max_investigations: integer('max_investigations').notNull().default(-1), // -1 = ilimitado
-  max_cost_brl:       real('max_cost_brl').notNull().default(-1),          // -1 = ilimitado
-  updated_at:         text('updated_at').notNull().default(sql`(datetime('now'))`),
+  plan:                      text('plan').primaryKey(),     // 'starter' | 'pro' | 'enterprise'
+  label:                     text('label').notNull(),
+  max_investigations:        integer('max_investigations').notNull().default(-1),        // -1 = ilimitado
+  max_cost_brl:              real('max_cost_brl').notNull().default(-1),                 // -1 = ilimitado
+  max_questions_per_worker:  integer('max_questions_per_worker').notNull().default(-1),  // -1 = ilimitado; limite de perguntas que Claude pode fazer a cada worker por investigação
+  updated_at:                text('updated_at').notNull().default(sql`(datetime('now'))`),
 })
 export type PlanConfig    = typeof plan_configs.$inferSelect
 export type NewPlanConfig = typeof plan_configs.$inferInsert
