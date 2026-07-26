@@ -39,5 +39,27 @@ export default async function PaginaInicial() {
     worker_count: mapaContagem.get(inv.id) ?? 0,
   }))
 
-  return <HomeClient investigations={resumos} />
+  // Buscar limite de investigações do plano da empresa
+  const company = await db
+    .select({ plan: schema.companies.plan })
+    .from(schema.companies)
+    .where(eq(schema.companies.id, session.companyId))
+    .get()
+
+  const planCfg = company
+    ? await db
+        .select({ max_investigations: schema.plan_configs.max_investigations, label: schema.plan_configs.label })
+        .from(schema.plan_configs)
+        .where(eq(schema.plan_configs.plan, company.plan))
+        .get()
+    : null
+
+  const planLimit = {
+    max: planCfg?.max_investigations ?? -1,
+    used: investigacoes.length,
+    plan: company?.plan ?? 'starter',
+    planLabel: planCfg?.label ?? '',
+  }
+
+  return <HomeClient investigations={resumos} planLimit={planLimit} />
 }

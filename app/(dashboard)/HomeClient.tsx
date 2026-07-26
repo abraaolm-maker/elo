@@ -15,11 +15,19 @@ const STATUS_LABELS: Record<string, string> = {
 
 const PAGE_SIZE = 12
 
-interface Props {
-  investigations: InvestigationSummary[]
+interface PlanLimit {
+  max: number
+  used: number
+  plan: string
+  planLabel: string
 }
 
-export function HomeClient({ investigations }: Props) {
+interface Props {
+  investigations: InvestigationSummary[]
+  planLimit: PlanLimit
+}
+
+export function HomeClient({ investigations, planLimit }: Props) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage] = useState(1)
@@ -65,6 +73,51 @@ export function HomeClient({ investigations }: Props) {
             Nova investigação
           </Link>
         </div>
+
+        {/* Barra de uso do plano — só exibe se houver limite definido */}
+        {planLimit.max !== -1 && (() => {
+          const pct = Math.min(100, (planLimit.used / planLimit.max) * 100)
+          const atLimit = planLimit.used >= planLimit.max
+          const nearLimit = pct >= 80 && !atLimit
+          const barColor = atLimit ? 'bg-red-500' : nearLimit ? 'bg-amber-400' : 'bg-teal-500'
+          const textColor = atLimit ? 'text-red-600' : nearLimit ? 'text-amber-600' : 'text-slate-500'
+          return (
+            <div className="mb-4 bg-slate-50 border border-slate-200 rounded-sm px-4 py-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
+                    Uso do plano {planLimit.planLabel}
+                  </span>
+                  {atLimit && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-600 uppercase tracking-wider">
+                      Limite atingido
+                    </span>
+                  )}
+                  {nearLimit && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-600 uppercase tracking-wider">
+                      Quase no limite
+                    </span>
+                  )}
+                </div>
+                <span className={`text-sm font-bold tabular-nums ${textColor}`}>
+                  {planLimit.used} / {planLimit.max}
+                  <span className="text-xs font-normal text-slate-400 ml-1">investigações</span>
+                </span>
+              </div>
+              <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              {atLimit && (
+                <p className="text-xs text-red-600 mt-2">
+                  Você atingiu o limite de investigações do seu plano. Entre em contato para fazer upgrade.
+                </p>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Filtros */}
         <div className="flex items-center gap-3 flex-wrap">
