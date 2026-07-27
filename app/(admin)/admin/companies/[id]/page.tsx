@@ -14,6 +14,7 @@ interface Detail {
   total_cost_brl: number
   recent_logs: { id: string; operation: string; input_tokens: number; output_tokens: number; cost_brl: number; created_at: string }[]
 }
+interface PlanConfig { plan: string; label: string; max_investigations: number; max_cost_brl: number; max_questions_per_worker: number }
 
 function fmt(n: number) { return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 const STATUS_COLORS: Record<string, string> = {
@@ -29,6 +30,12 @@ export default function CompanyDetailPage() {
   const id = params.id as string
   const [detail, setDetail] = useState<Detail | null>(null)
   const [tab, setTab] = useState<'overview' | 'managers' | 'investigations' | 'logs'>('overview')
+  const [planConfigs, setPlanConfigs] = useState<PlanConfig[]>([])
+  const [changingPlan, setChangingPlan] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState('')
+  const [planSaving, setPlanSaving] = useState(false)
+  const [planWarning, setPlanWarning] = useState('')
+  const [planSuccess, setPlanSuccess] = useState('')
 
   // Estado formulário novo gestor
   const [showForm, setShowForm]     = useState(false)
@@ -53,6 +60,40 @@ export default function CompanyDetailPage() {
   }
 
   useEffect(() => { load() }, [id])
+
+  useEffect(() => {
+    fetch('/api/admin/plans')
+      .then(r => r.json() as Promise<{ data: PlanConfig[] }>)
+      .then(j => setPlanConfigs(j.data ?? []))
+      .catch(console.error)
+  }, [])
+
+  async function handlePlanChange() {
+    if (!selectedPlan || !detail) return
+    setPlanSaving(true); setPlanWarning(''); setPlanSuccess('')
+    try {
+      const res = await fetch(`/api/admin/companies/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: selectedPlan }),
+      })
+      const j = await res.json() as { data?: { company: Company; downgrade_warning: string | null }; error?: string }
+      if (!res.ok || j.error) {
+        setPlanWarning(j.error ?? 'Erro ao alterar plano')
+        return
+      }
+      if (j.data?.downgrade_warning) {
+        setPlanWarning(j.data.downgrade_warning)
+      } else {
+        setPlanSuccess(`Plano alterado para ${selectedPlan} com sucesso.`)
+        setTimeout(() => setPlanSuccess(''), 4000)
+      }
+      setChangingPlan(false)
+      load()
+    } finally {
+      setPlanSaving(false)
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -146,6 +187,128 @@ export default function CompanyDetailPage() {
             <p className="text-3xl font-bold text-slate-900">{investigations.length}</p>
             <p className="text-xs text-slate-400 mt-1">{investigations.filter(i => i.status === 'completed').length} concluída(s)</p>
           </div>
+
+          {/* Plano — com opção de alteração */}
+          <div className="bg-white border border-slate-200 rounded-sm p-5 col-span-2">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Plano contratado</p>
+                <div className="flex items-center gap-3">
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded border uppercase tracking-wider ${
+                    company.plan === 'enterprise' ? 'bg-violet-50 text-violet-700 border-violet-200'
+                    : company.plan === 'pro'       ? 'bg-sky-50 text-sky-700 border-sky-200'
+                    :                               'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>{company.plan}</span>
+                  {planConfigs.length > 0 && (() => {
+                    const cfg = planConfigs.find(p => p.plan === company.plan)
+                    if (!cfg) return null
+                    return (
+                      <span className="text-xs text-slate-400">
+                        {cfg.max_investigations === -1 ? 'Investigações ilimitadas' : `Até ${cfg.max_investigations} investigações`}
+                        {' · '}
+                        {cfg.max_questions_per_worker === -1 ? 'Perguntas ilimitadas' : `${cfg.max_questions_per_worker} perguntas/worker`}
+                      </span>
+                    )
+                  })()}
+                </div>
+              </div>
+              {!changingPlan && (
+                <button
+                  onClick={() => { setChangingPlan(true); setSelectedPlan(company.plan); setPlanWarning(''); setPlanSuccess('') }}
+                  className="text-xs font-semibold text-teal-700 hover:underline border border-teal-200 bg-teal-50 px-3 py-1.5 rounded-sm hover:bg-teal-100 transition-colors"
+                >
+                  Alterar plano
+                </button>
+              )}
+            </div>
+
+            {planSuccess && (
+              <p className="mt-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-sm">{planSuccess}</p>
+            )}
+
+            {changingPlan && (
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <p className="text-xs font-semibold text-slate-600 mb-3">Selecione o novo plano:</p>
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {planConfigs.map(cfg => {
+                    const isCurrentPlan = cfg.plan === company.plan
+                    const isSelected    = cfg.plan === selectedPlan
+                    const wouldDowngrade = cfg.max_investigations !== -1 && investigations.length > cfg.max_investigations
+                    return (
+                      <button
+                        key={cfg.plan}
+                        onClick={() => setSelectedPlan(cfg.plan)}
+                        className={`text-left p-4 rounded-sm border-2 transition-all ${
+                          isSelected
+                            ? 'border-teal-500 bg-teal-50'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        } ${isCurrentPlan ? 'opacity-60 cursor-default' : ''}`}
+                        disabled={isCurrentPlan}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                            cfg.plan === 'enterprise' ? 'bg-violet-100 text-violet-700'
+                            : cfg.plan === 'pro'       ? 'bg-sky-100 text-sky-700'
+                            :                           'bg-amber-100 text-amber-700'
+                          }`}>{cfg.label ?? cfg.plan}</span>
+                          {isCurrentPlan && <span className="text-[9px] text-slate-400 uppercase tracking-wider">Atual</span>}
+                          {isSelected && !isCurrentPlan && <span className="text-[9px] text-teal-600 font-bold">✓ Selecionado</span>}
+                        </div>
+                        <p className="text-xs text-slate-600">
+                          {cfg.max_investigations === -1 ? '∞ investigações' : `${cfg.max_investigations} investigações`}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {cfg.max_questions_per_worker === -1 ? '∞ perguntas/worker' : `${cfg.max_questions_per_worker} perguntas/worker`}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {cfg.max_cost_brl === -1 ? 'Custo ilimitado' : `Até R$ ${fmt(cfg.max_cost_brl)}/mês`}
+                        </p>
+                        {wouldDowngrade && !isCurrentPlan && (
+                          <p className="text-[10px] text-amber-600 mt-2 font-medium">
+                            ⚠ Uso atual ({investigations.length}) excede este limite
+                          </p>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Aviso de downgrade em destaque */}
+                {selectedPlan && selectedPlan !== company.plan && (() => {
+                  const cfg = planConfigs.find(p => p.plan === selectedPlan)
+                  if (!cfg || cfg.max_investigations === -1 || investigations.length <= cfg.max_investigations) return null
+                  return (
+                    <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-sm text-xs text-amber-700">
+                      <strong>Atenção — downgrade com uso excedente:</strong> esta empresa tem {investigations.length} investigação(ões) criadas e o plano <strong>{cfg.label ?? selectedPlan}</strong> permite até {cfg.max_investigations}. O plano será alterado, mas a empresa ficará bloqueada para criar novas investigações até reduzir o uso abaixo do limite. Investigações existentes não serão excluídas.
+                    </div>
+                  )
+                })()}
+
+                {planWarning && (
+                  <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-sm text-xs text-amber-700">
+                    {planWarning}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handlePlanChange}
+                    disabled={planSaving || !selectedPlan || selectedPlan === company.plan}
+                    className="bg-slate-900 text-white text-xs font-semibold uppercase tracking-wider py-2 px-4 rounded-sm hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                  >
+                    {planSaving ? 'Salvando…' : 'Confirmar alteração'}
+                  </button>
+                  <button
+                    onClick={() => { setChangingPlan(false); setPlanWarning('') }}
+                    className="text-xs text-slate-500 hover:text-slate-800"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="bg-white border border-slate-200 rounded-sm p-5 col-span-2">
             <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-4">Custo por gestor</p>
             <table className="w-full text-sm">

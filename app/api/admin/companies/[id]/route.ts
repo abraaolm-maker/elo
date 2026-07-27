@@ -1,6 +1,6 @@
 import { db, schema } from "@/lib/db"
 import { requireAdmin, isForbiddenError, forbiddenResponse, unauthorizedResponse, isUnauthorizedError } from "@/lib/auth/middleware"
-import { eq, sum } from "drizzle-orm"
+import { eq, sum, count } from "drizzle-orm"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -51,5 +51,47 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (isForbiddenError(error)) return forbiddenResponse()
     console.error("[admin/companies/[id] GET]", error)
     return Response.json({ error: "Erro interno" }, { status: 500 })
+  }
+}
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requireAdmin(request)
+    const { id } = await params
+    const { plan } = await request.json() as { plan: string }
+
+    if (!plan) return Response.json({ error: 'plan obrigatório' }, { status: 400 })
+
+    const company = await db.select().from(schema.companies).where(eq(schema.companies.id, id)).get()
+    if (!company) return Response.json({ error: 'Empresa não encontrada' }, { status: 404 })
+
+    // Buscar configuração do novo plano
+    const newPlanCfg = await db.select().from(schema.plan_configs).where(eq(schema.plan_configs.plan, plan)).get()
+    if (!newPlanCfg) return Response.json({ error: `Plano "${plan}" não encontrado` }, { status: 400 })
+
+    // Contar investigações atuais para detectar violação de downgrade
+    const [invCount] = await db
+      .select({ cnt: count() })
+      .from(schema.investigations)
+      .where(eq(schema.investigations.company_id, id))
+
+    const currentCount = invCount?.cnt ?? 0
+    const newMax = newPlanCfg.max_investigations
+
+    // Aviso de downgrade: plano novo tem limite menor que o uso atual
+    // (não bloqueamos — admin é quem decide, mas informamos)
+    const downgradeWarning = newMax !== -1 && currentCount > newMax
+      ? `Esta empresa tem ${currentCount} investigação(ões) criadas. O plano ${newPlanCfg.label ?? plan} permite até ${newMax}. A empresa não poderá criar novas investigações até reduzir o uso abaixo do limite. Investigações existentes não são deletadas.`
+      : null
+
+    await db.update(schema.companies).set({ plan }).where(eq(schema.companies.id, id))
+
+    const updated = await db.select().from(schema.companies).where(eq(schema.companies.id, id)).get()
+    return Response.json({ data: { company: updated, downgrade_warning: downgradeWarning } })
+  } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse()
+    if (isForbiddenError(error)) return forbiddenResponse()
+    console.error('[admin/companies/[id] PATCH]', error)
+    return Response.json({ error: 'Erro interno' }, { status: 500 })
   }
 }
