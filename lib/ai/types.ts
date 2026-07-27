@@ -31,6 +31,7 @@ export interface InvestigationEngineInput {
   managerNotes: string
   investigationContext?: InvestigationContext | null
   maxQuestionsPerWorker?: number  // limite de perguntas por worker por investigação (-1 = ilimitado)
+  questionsAsked?: number         // quantas perguntas outbound já foram feitas para este worker
   // rastreamento de custos
   companyId?: string
   managerId?: string

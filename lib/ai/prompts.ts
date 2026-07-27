@@ -1,13 +1,44 @@
 import type { InvestigationContext } from './types'
 
-function buildQuestionLimitRule(maxQuestions: number | undefined): string {
+function buildQuestionLimitRule(maxQuestions: number | undefined, questionsAsked: number): string {
   if (!maxQuestions || maxQuestions === -1) return ''
+
+  const remaining = Math.max(0, maxQuestions - questionsAsked)
+
+  // Atingiu o limite
+  if (remaining === 0) {
+    return `
+12. LIMITE DE PERGUNTAS ATINGIDO — Você já fez ${questionsAsked} de ${maxQuestions} pergunta(s) permitidas.
+    - OBRIGATÓRIO: defina action = "mark_saturated" agora.
+    - Consolide nos key_points_extracted tudo que foi possível extrair das respostas recebidas.`
+  }
+
+  // Última pergunta disponível
+  if (remaining === 1) {
+    return `
+12. CONTADOR DE PERGUNTAS — ${questionsAsked} de ${maxQuestions} perguntas usadas. RESTA APENAS 1 PERGUNTA.
+    - Esta é sua última chance de extrair informação deste worker.
+    - NÃO faça uma pergunta genérica. Com base em tudo que ele respondeu até agora, identifique o gap mais crítico — o dado que ainda falta para fechar a análise — e formule UMA pergunta cirúrgica que o cubra.
+    - Se houver pendingValidations ainda não explorados, esta é a hora de cobri-los indiretamente.
+    - Após esta resposta, a próxima chamada obrigatoriamente usará action = "mark_saturated".`
+  }
+
+  // Poucas perguntas restando (≤ 30% do limite, mínimo 2)
+  const threshold = Math.max(2, Math.ceil(maxQuestions * 0.3))
+  if (remaining <= threshold) {
+    return `
+12. CONTADOR DE PERGUNTAS — ${questionsAsked} de ${maxQuestions} usadas. Restam ${remaining} pergunta(s).
+    - Você está na fase final. Não explore novos tópicos — aprofunde ou confirme o que já emergiu.
+    - Prioridade: (1) pendingValidations ainda não cobertos, (2) pontos-chave que precisam de mais detalhe, (3) confirmação de causa raiz.
+    - Cada pergunta deve trazer informação que o relatório final usará diretamente.
+    - Saturação natural (score ≥ 86) sempre prevalece — se o worker saturou antes, pare antes.`
+  }
+
+  // Ainda tem espaço confortável
   return `
-12. LIMITE DE PERGUNTAS — Esta investigação permite no máximo ${maxQuestions} pergunta(s) por worker.
-    - Você pode verificar quantas perguntas já foram feitas contando as mensagens "outbound" em messageHistory.
-    - Se já atingiu o limite: defina action = "mark_saturated", mesmo que a saturação não seja perfeita.
-    - Se ainda tem perguntas disponíveis: use-as com sabedoria. Priorize as que trarão mais informação nova.
-    - Saturação natural (score ≥ 86) sempre prevalece sobre o limite — se o worker saturou antes, pare antes.`
+12. CONTADOR DE PERGUNTAS — ${questionsAsked} de ${maxQuestions} usadas. Restam ${remaining} pergunta(s).
+    - Use as perguntas restantes com consciência: explore amplitude antes de aprofundar.
+    - Saturação natural (score ≥ 86) sempre prevalece — se o worker saturou antes, pare antes.`
 }
 
 const BASE_ENGINE_RULES = `
@@ -64,9 +95,10 @@ Você receberá um JSON com:
 
 export function buildInvestigationEnginePrompt(
   context?: InvestigationContext | null,
-  maxQuestionsPerWorker?: number
+  maxQuestionsPerWorker?: number,
+  questionsAsked = 0
 ): string {
-  const limitRule = buildQuestionLimitRule(maxQuestionsPerWorker)
+  const limitRule = buildQuestionLimitRule(maxQuestionsPerWorker, questionsAsked)
   const rules = BASE_ENGINE_RULES + limitRule
 
   if (!context) {

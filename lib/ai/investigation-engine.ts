@@ -72,9 +72,17 @@ async function callClaude(
   client: Anthropic,
   input: InvestigationEngineInput
 ): Promise<Anthropic.Message> {
-  const systemPrompt = buildInvestigationEnginePrompt(input.investigationContext, input.maxQuestionsPerWorker)
-  // Não enviar investigationContext nem maxQuestionsPerWorker no payload (já estão no system prompt)
-  const { investigationContext: _ctx, maxQuestionsPerWorker: _mq, ...payload } = input
+  // Calcular quantas perguntas outbound já foram feitas para este worker
+  const questionsAsked = input.questionsAsked
+    ?? input.messageHistory.filter(m => m.direction === 'outbound').length
+
+  const systemPrompt = buildInvestigationEnginePrompt(
+    input.investigationContext,
+    input.maxQuestionsPerWorker,
+    questionsAsked
+  )
+  // Remover campos que já foram injetados no system prompt do payload enviado à IA
+  const { investigationContext: _ctx, maxQuestionsPerWorker: _mq, questionsAsked: _qa, ...payload } = input
   return client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 1024,
