@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useToast } from '@/components/ui/toast'
+import { ReportPrintable } from './ReportPrintable'
+import { ExportPdfButton } from './ExportPdfButton'
 import type { IshikawaBreakdownOutput, SourceSummaryOutput, ActionPlanTimeframe } from '@/lib/ai/types'
 
 export interface ActionItemData {
@@ -37,6 +39,8 @@ export interface ReportData {
 interface ReportViewProps {
   investigationTitle: string
   report: ReportData
+  problemDescription?: string
+  companyName?: string
 }
 
 const ISHIKAWA_LABELS: Record<keyof IshikawaBreakdownOutput, string> = {
@@ -247,7 +251,7 @@ function ActionPlanSection({ items }: { items: ActionItemData[] }) {
 }
 
 // ─── ReportView principal ─────────────────────────────────────────────────────
-export function ReportView({ investigationTitle, report }: ReportViewProps) {
+export function ReportView({ investigationTitle, report, problemDescription = '', companyName = '' }: ReportViewProps) {
   const generatedAt = new Date(report.generated_at).toLocaleDateString('pt-BR', {
     day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })
@@ -255,14 +259,32 @@ export function ReportView({ investigationTitle, report }: ReportViewProps) {
   return (
     <div className="space-y-8 max-w-4xl">
 
+      {/* Versão para impressão — invisível na tela, usada ao exportar PDF */}
+      <ReportPrintable
+        investigationTitle={investigationTitle}
+        problemDescription={problemDescription}
+        companyName={companyName}
+        generatedAt={report.generated_at}
+        rootCause={report.root_cause}
+        confidenceScore={report.confidence_score}
+        confidenceJustification={report.confidence_justification}
+        ishikawa={report.ishikawa_breakdown ?? {}}
+        sources={report.sources_summary ?? []}
+        recommendations={report.recommendations}
+        actionItems={report.action_items}
+      />
+
       {/* 1. CABEÇALHO */}
-      <div>
-        <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Relatório de causa raiz</p>
-        <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">{investigationTitle}</h1>
-        <div className="mt-3 flex flex-wrap items-center gap-4">
-          <span className="text-xs font-mono text-slate-400">Gerado em {generatedAt}</span>
-          <ConfidenceMeter score={report.confidence_score} />
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Relatório de causa raiz</p>
+          <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">{investigationTitle}</h1>
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <span className="text-xs font-mono text-slate-400">Gerado em {generatedAt}</span>
+            <ConfidenceMeter score={report.confidence_score} />
+          </div>
         </div>
+        <ExportPdfButton className="shrink-0" />
       </div>
 
       {/* 2. CAUSA RAIZ */}

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { ReportPrintable } from '@/components/reports/ReportPrintable'
+import { ExportPdfButton } from '@/components/reports/ExportPdfButton'
 
 interface IshikawaBreakdown { mao_de_obra: string | null; maquina: string | null; metodo: string | null; material: string | null; meio_ambiente: string | null; medicao: string | null }
 interface SourceSummary { alias: string; role: string; key_points: string[] }
@@ -61,15 +63,18 @@ export default function AdminRelatorioPage() {
         <span className="text-slate-600">{investigation.title}</span>
       </div>
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-900">{investigation.title}</h1>
-        <div className="flex gap-4 mt-2 text-xs text-slate-500">
-          <span>{company_name}</span>
-          <span>·</span>
-          <span>{investigation.created_at.slice(0, 10)}</span>
-          <span>·</span>
-          <span>Custo: R$ {fmt(cost_brl)}</span>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">{investigation.title}</h1>
+          <div className="flex gap-4 mt-2 text-xs text-slate-500">
+            <span>{company_name}</span>
+            <span>·</span>
+            <span>{investigation.created_at.slice(0, 10)}</span>
+            <span>·</span>
+            <span>Custo: R$ {fmt(cost_brl)}</span>
+          </div>
         </div>
+        {report && <ExportPdfButton className="shrink-0" />}
       </div>
 
       <div className="mb-6 bg-white border border-slate-200 rounded-sm p-5">
@@ -87,6 +92,19 @@ export default function AdminRelatorioPage() {
 
       {report && (
         <>
+          <ReportPrintable
+            investigationTitle={investigation.title}
+            problemDescription={investigation.problem_description}
+            companyName={company_name}
+            generatedAt={report.generated_at}
+            rootCause={report.root_cause}
+            confidenceScore={report.confidence_score}
+            confidenceJustification={report.confidence_justification}
+            ishikawa={ishikawa}
+            sources={sources}
+            recommendations={recs}
+          />
+
           {/* Causa raiz */}
           <div className="mb-4 bg-white border border-slate-200 rounded-sm p-5">
             <div className="flex items-center justify-between mb-3">

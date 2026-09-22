@@ -21,9 +21,14 @@ export default async function ReportPage({ params }: RouteParams) {
   const session = await getSession()
   if (!session) redirect('/login')
 
-  const [investigation, report] = await Promise.all([
+  const [investigation, report, company] = await Promise.all([
     db
-      .select({ id: schema.investigations.id, title: schema.investigations.title, status: schema.investigations.status })
+      .select({
+        id: schema.investigations.id,
+        title: schema.investigations.title,
+        status: schema.investigations.status,
+        problem_description: schema.investigations.problem_description,
+      })
       .from(schema.investigations)
       .where(and(eq(schema.investigations.id, investigationId), eq(schema.investigations.company_id, session.companyId)))
       .get(),
@@ -32,6 +37,12 @@ export default async function ReportPage({ params }: RouteParams) {
       .select()
       .from(schema.reports)
       .where(eq(schema.reports.investigation_id, investigationId))
+      .get(),
+
+    db
+      .select({ name: schema.companies.name })
+      .from(schema.companies)
+      .where(eq(schema.companies.id, session.companyId))
       .get(),
   ])
 
@@ -99,7 +110,12 @@ export default async function ReportPage({ params }: RouteParams) {
       {/* Content */}
       <div className="px-8 py-6">
         {reportData ? (
-          <ReportView investigationTitle={investigation.title} report={reportData} />
+          <ReportView
+            investigationTitle={investigation.title}
+            report={reportData}
+            problemDescription={investigation.problem_description}
+            companyName={company?.name ?? ''}
+          />
         ) : canGenerate ? (
           <div className="space-y-4">
             <div className="border border-slate-200 rounded-sm bg-white p-6 max-w-md">
