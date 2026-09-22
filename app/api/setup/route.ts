@@ -1,5 +1,6 @@
 import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
+import { createHash, timingSafeEqual, randomBytes } from 'crypto'
 
 async function runSafe(sqlStr: string, label: string): Promise<string> {
   try {
@@ -17,6 +18,17 @@ async function runSafe(sqlStr: string, label: string): Promise<string> {
   }
 }
 
+/** Comparação de tempo constante — evita descobrir o secret por timing. */
+function secretsMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided)
+  const b = Buffer.from(expected)
+  // timingSafeEqual exige buffers do mesmo tamanho; comparar o tamanho antes
+  // vazaria essa informação, então normalizamos via hash de tamanho fixo.
+  const ha = createHash('sha256').update(a).digest()
+  const hb = createHash('sha256').update(b).digest()
+  return timingSafeEqual(ha, hb)
+}
+
 export async function GET(request: Request) {
   const secret = (process.env.SETUP_SECRET ?? '').trim()
   if (!secret) {
@@ -25,9 +37,14 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const provided = (url.searchParams.get('secret') ?? '').trim()
-  if (provided !== secret) {
-    return Response.json({ error: 'Secret inválido', provided_len: provided.length, stored_len: secret.length }, { status: 401 })
+  if (!secretsMatch(provided, secret)) {
+    // Nunca expor tamanhos nem qualquer detalhe do secret esperado
+    return Response.json({ error: 'Secret inválido' }, { status: 401 })
   }
+
+  // Reset de senha do admin só acontece com pedido explícito (?reset_admin=1).
+  // Sem isso, rodar o setup para migrar schema NÃO mexe na senha existente.
+  const resetAdmin = url.searchParams.get('reset_admin') === '1'
 
   const results: string[] = []
 
@@ -258,23 +275,40 @@ export async function GET(request: Request) {
       company = await db.select().from(schema.companies).where(eq(schema.companies.id, cid)).then(r => r[0])
     }
 
-    const existing = await db.select().from(schema.managers).where(eq(schema.managers.email, 'admin@elo.com')).then(r => r[0])
+    const adminEmail = (process.env.ADMIN_EMAIL ?? 'admin@elo.com').toLowerCase().trim()
+    const existing = await db.select().from(schema.managers).where(eq(schema.managers.email, adminEmail)).then(r => r[0])
+
     if (existing) {
-      const hash = await bcrypt.default.hash('elo@admin2024', 10)
-      await db.update(schema.managers).set({ is_admin: true, password_hash: hash, is_active: true }).where(eq(schema.managers.email, 'admin@elo.com'))
-      results.push('~ admin@elo.com (atualizado)')
+      // Garantir que a conta continua admin e ativa — isso é seguro de repetir.
+      await db.update(schema.managers).set({ is_admin: true, is_active: true }).where(eq(schema.managers.email, adminEmail))
+
+      if (resetAdmin) {
+        // Reset explícito: gera senha aleatória e mostra UMA vez na resposta.
+        const novaSenha = randomBytes(12).toString('base64url')
+        const hash = await bcrypt.default.hash(novaSenha, 12)
+        await db.update(schema.managers).set({ password_hash: hash }).where(eq(schema.managers.email, adminEmail))
+        results.push(`~ ${adminEmail} — SENHA RESETADA: ${novaSenha}  (anote agora, não será exibida novamente)`)
+      } else {
+        results.push(`~ ${adminEmail} (já existe, senha preservada)`)
+      }
     } else {
-      const hash = await bcrypt.default.hash('elo@admin2024', 10)
+      // Primeira criação: usa ADMIN_INITIAL_PASSWORD se definida, senão gera aleatória.
+      const senhaInicial = (process.env.ADMIN_INITIAL_PASSWORD ?? '').trim() || randomBytes(12).toString('base64url')
+      const hash = await bcrypt.default.hash(senhaInicial, 12)
       await db.insert(schema.managers).values({
         id: crypto.default.randomUUID(),
         company_id: company!.id,
         name: 'Admin Elo',
-        email: 'admin@elo.com',
+        email: adminEmail,
         password_hash: hash,
         is_admin: true,
         is_active: true,
       })
-      results.push('✓ admin@elo.com criado')
+      results.push(
+        process.env.ADMIN_INITIAL_PASSWORD
+          ? `✓ ${adminEmail} criado (senha = ADMIN_INITIAL_PASSWORD)`
+          : `✓ ${adminEmail} criado — SENHA: ${senhaInicial}  (anote agora, não será exibida novamente)`
+      )
     }
   } catch (err) {
     results.push(`✗ admin: ${err instanceof Error ? err.message : String(err)}`)
