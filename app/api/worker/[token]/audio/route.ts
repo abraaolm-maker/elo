@@ -8,6 +8,8 @@ import OpenAI from 'openai'
 import { toFile } from 'openai/uploads'
 import { env } from '@/lib/utils/env'
 import type { InvestigationContext } from '@/lib/ai/types'
+import { canSpendOnAi } from '@/lib/billing/plan-limits'
+import { logWarn } from '@/lib/monitoring/logger'
 
 interface RouteParams { params: Promise<{ token: string }> }
 
@@ -130,6 +132,29 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .where(eq(schema.companies.id, iw.company_id))
     .get()
   const maxQuestionsPerWorker = planCfgAudio?.max_questions_per_worker ?? -1
+
+  // Teto de custo de IA — mesma proteção da rota de texto
+  const orcamentoAudio = await canSpendOnAi(iw.company_id)
+  if (!orcamentoAudio.ok) {
+    await db
+      .update(schema.investigation_workers)
+      .set({ status: 'saturated' })
+      .where(eq(schema.investigation_workers.id, iw.iw_id))
+
+    await logWarn('api/worker/audio', 'Teto de custo do plano atingido — worker encerrado', {
+      companyId: iw.company_id,
+      investigationId: iw.investigation_id,
+    })
+
+    return Response.json({
+      data: {
+        outbound_message: null,
+        saturation_score: 100,   // encerrado por limite: tratar como saturado no cliente
+        status: 'saturated',
+        message: 'Obrigado pela sua participação! Suas respostas foram registradas.',
+      },
+    })
+  }
 
   const engineOutput = await runInvestigationEngine({
     problemDescription: iw.problem_description,

@@ -5,6 +5,8 @@ import { eq, and, ne } from 'drizzle-orm'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import crypto from 'crypto'
 import type { InvestigationContext } from '@/lib/ai/types'
+import { canSpendOnAi } from '@/lib/billing/plan-limits'
+import { logWarn } from '@/lib/monitoring/logger'
 
 interface RouteParams { params: Promise<{ token: string }> }
 
@@ -110,6 +112,31 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .where(eq(schema.companies.id, iw.company_id))
     .get()
   const maxQuestionsPerWorker = planCfg?.max_questions_per_worker ?? -1
+
+  // Teto de custo de IA — verificado a cada chamada, não só na criação da
+  // investigação. Ao estourar, encerramos a participação deste worker como
+  // saturada em vez de continuar gastando.
+  const orcamento = await canSpendOnAi(iw.company_id)
+  if (!orcamento.ok) {
+    await db
+      .update(schema.investigation_workers)
+      .set({ status: 'saturated' })
+      .where(eq(schema.investigation_workers.id, iw.iw_id))
+
+    await logWarn('api/worker/messages', 'Teto de custo do plano atingido — worker encerrado', {
+      companyId: iw.company_id,
+      investigationId: iw.investigation_id,
+    })
+
+    return Response.json({
+      data: {
+        outbound_message: null,
+        saturation_score: iw.saturation_score,
+        status: 'saturated',
+        message: 'Obrigado pela sua participação! Suas respostas foram registradas.',
+      },
+    })
+  }
 
   // Rodar engine
   const engineOutput = await runInvestigationEngine({

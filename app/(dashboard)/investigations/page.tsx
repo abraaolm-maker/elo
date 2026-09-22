@@ -46,13 +46,20 @@ export default async function PaginaInicial() {
     .where(eq(schema.companies.id, session.companyId))
     .get()
 
-  const planCfg = company
-    ? await db
+  // A barra de uso é informativa: se plan_configs ainda não existir no banco,
+  // a página principal do gestor não pode quebrar por causa disso
+  let planCfg: { max_investigations: number; label: string } | null | undefined = null
+  if (company) {
+    try {
+      planCfg = await db
         .select({ max_investigations: schema.plan_configs.max_investigations, label: schema.plan_configs.label })
         .from(schema.plan_configs)
         .where(eq(schema.plan_configs.plan, company.plan))
         .get()
-    : null
+    } catch {
+      planCfg = null
+    }
+  }
 
   const planLimit = {
     max: planCfg?.max_investigations ?? -1,

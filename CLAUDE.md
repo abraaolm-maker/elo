@@ -786,6 +786,26 @@ POST /api/whatsapp/webhook recebido:
 
 ---
 
+## 11.1 Decisões de escopo do MVP / free trial
+
+> Registrado em 22/09/2026, durante a preparação do primeiro free trial.
+
+**Canal de uso no MVP: apenas web (portal do worker), apenas texto.**
+O trabalhador acessa por link + CPF e responde digitando. WhatsApp e áudio ficam
+desligados até haver um cliente pagante.
+
+Consequências aceitas conscientemente:
+
+| Item adiado | Por quê | O que fazer quando houver cliente |
+|---|---|---|
+| **Transcrição de áudio (Whisper)** | `OPENAI_API_KEY` não está configurada em produção. Sem ela, `transcribeAudio()` falha com 401 e o áudio é perdido. | Configurar `OPENAI_API_KEY` na Vercel antes de liberar resposta por áudio. |
+| **Retry / fila de envio WhatsApp** | `sendViaMeta` retorna `{success:false}` e segue adiante, sem retry nem dead-letter. Se a Meta estiver instável, o worker nunca recebe a pergunta e ninguém percebe. | Implementar retry com backoff + fila de reenvio antes de vincular o WhatsApp. |
+| **Testes automatizados** | 32 rotas de API sem cobertura. Adiado para a rodada seguinte de correções. | Priorizar testes de: limites de plano, autenticação do worker, rate limiting. |
+
+**Ao religar WhatsApp ou áudio, revisar estes três pontos antes de subir.**
+
+---
+
 ## 12. Sequência de desenvolvimento recomendada
 
 1. ✅ Setup do projeto Next.js + Supabase + variáveis de ambiente

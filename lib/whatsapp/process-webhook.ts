@@ -8,6 +8,8 @@ import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
 import { generateReport } from '@/lib/ai/report-generator'
 import type { MessageHistoryEntry, ReportMessageEntry, WorkerAlias, InvestigationContext } from '@/lib/ai/types'
 import crypto from 'crypto'
+import { canSpendOnAi } from '@/lib/billing/plan-limits'
+import { logWarn } from '@/lib/monitoring/logger'
 
 // ─── Lógica central — aceita payload bruto do Meta WhatsApp ──────────────────
 
@@ -245,6 +247,20 @@ export async function processInboundMessage({
     .where(eq(schema.companies.id, investigation.company_id))
     .get()
   const maxQuestionsPerWorker = planCfgWh?.max_questions_per_worker ?? -1
+
+  // Teto de custo de IA — encerra o worker em vez de seguir gastando
+  const orcamentoWh = await canSpendOnAi(investigation.company_id)
+  if (!orcamentoWh.ok) {
+    await db
+      .update(schema.investigation_workers)
+      .set({ status: 'saturated' })
+      .where(eq(schema.investigation_workers.id, iw.id))
+    await logWarn('whatsapp/process-webhook', 'Teto de custo do plano atingido — worker encerrado', {
+      companyId: investigation.company_id,
+      investigationId: iw.investigation_id,
+    })
+    return
+  }
 
   let engineOutput
   try {

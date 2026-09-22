@@ -4,6 +4,114 @@ import { useEffect, useState } from 'react'
 
 interface StuckInv { id: string; title: string; status: string; company_name: string; created_at: string; cost_brl: number }
 
+interface ErroLog {
+  id: string
+  level: string
+  source: string
+  message: string
+  stack: string | null
+  context: string | null
+  created_at: string
+}
+
+function fmtQuando(iso: string): string {
+  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z')
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+/** Lista de erros capturados em produção. */
+function PainelErros() {
+  const [erros, setErros] = useState<ErroLog[]>([])
+  const [ultimas24h, setUltimas24h] = useState(0)
+  const [carregando, setCarregando] = useState(true)
+  const [aberto, setAberto] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/admin/erros?limit=50')
+      .then(r => r.json() as Promise<{ data: { erros: ErroLog[]; ultimas_24h: number } }>)
+      .then(j => { setErros(j.data?.erros ?? []); setUltimas24h(j.data?.ultimas_24h ?? 0) })
+      .catch(() => { /* tabela pode não existir ainda */ })
+      .finally(() => setCarregando(false))
+  }, [])
+
+  return (
+    <section className="mt-12">
+      <div className="flex items-baseline justify-between mb-1">
+        <h2 className="text-lg font-semibold text-slate-900">Erros recentes</h2>
+        {!carregando && (
+          <span className={`text-xs font-semibold px-2 py-1 rounded ${
+            ultimas24h === 0 ? 'bg-green-100 text-green-700'
+            : ultimas24h < 10 ? 'bg-amber-100 text-amber-700'
+            : 'bg-red-100 text-red-700'
+          }`}>
+            {ultimas24h} nas últimas 24h
+          </span>
+        )}
+      </div>
+      <p className="text-sm text-slate-500 mb-5">
+        Falhas capturadas em produção. Use para detectar problemas antes que o cliente reclame.
+      </p>
+
+      {carregando && <p className="text-sm text-slate-400">Carregando…</p>}
+
+      {!carregando && erros.length === 0 && (
+        <div className="bg-green-50 border border-green-200 rounded-sm px-5 py-6 text-center">
+          <p className="text-green-700 font-medium text-sm">Nenhum erro registrado</p>
+          <p className="text-green-600 text-xs mt-1">
+            Se esta seção estiver sempre vazia, confirme que <code>/api/setup</code> já foi executado.
+          </p>
+        </div>
+      )}
+
+      {!carregando && erros.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-sm divide-y divide-slate-100">
+          {erros.map(e => (
+            <div key={e.id} className="px-4 py-3">
+              <div className="flex items-start gap-3">
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${
+                  e.level === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                }`}>
+                  {e.level}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <code className="text-xs font-semibold text-slate-700">{e.source}</code>
+                    <span className="text-[10px] text-slate-400">{fmtQuando(e.created_at)}</span>
+                  </div>
+                  <p className="text-sm text-slate-600 mt-1 break-words">{e.message}</p>
+                  {(e.stack || e.context) && (
+                    <button
+                      onClick={() => setAberto(aberto === e.id ? null : e.id)}
+                      className="text-[10px] font-semibold uppercase tracking-wider text-teal-600 hover:text-teal-800 mt-1.5"
+                    >
+                      {aberto === e.id ? 'Ocultar detalhes' : 'Ver detalhes'}
+                    </button>
+                  )}
+                  {aberto === e.id && (
+                    <div className="mt-2 space-y-2">
+                      {e.context && (
+                        <pre className="text-[10px] bg-slate-50 border border-slate-200 rounded p-2 overflow-x-auto text-slate-600">
+                          {e.context}
+                        </pre>
+                      )}
+                      {e.stack && (
+                        <pre className="text-[10px] bg-slate-50 border border-slate-200 rounded p-2 overflow-x-auto text-slate-500 max-h-48">
+                          {e.stack}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-slate-100 text-slate-600',
   active: 'bg-blue-100 text-blue-700',
@@ -136,6 +244,8 @@ export default function AdminSaudePage() {
           </div>
         </>
       )}
+
+      <PainelErros />
 
       {/* Modal de erro */}
       {errorModal && (

@@ -247,8 +247,9 @@ export default function WorkerPortal() {
             <li className="flex gap-2">
               <span className="text-teal-600 shrink-0">•</span>
               <span>
-                <strong>Seu nome nunca aparece.</strong> {managerName ? `${managerName} e a` : 'A'} liderança
-                recebe um relatório onde você é identificado apenas como
+                <strong>Seu nome nunca aparece.</strong>{' '}
+                {managerName ? `${managerName} e a liderança recebem` : 'A liderança recebe'}{' '}
+                um relatório onde você é identificado apenas como
                 &ldquo;Colaborador&rdquo; e pelo seu cargo.
               </span>
             </li>

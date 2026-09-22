@@ -154,16 +154,69 @@ export function HomeClient({ investigations, planLimit }: Props) {
       {/* Content */}
       <div className="px-8 py-6">
         {investigations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-12 h-12 bg-slate-100 rounded flex items-center justify-center text-slate-400 mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-              </svg>
+          <div className="max-w-2xl mx-auto py-12">
+            <div className="text-center mb-10">
+              <div className="w-12 h-12 bg-teal-50 border border-teal-100 rounded-lg flex items-center justify-center text-teal-600 mb-4 mx-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-semibold text-slate-900 mb-1.5">Vamos encontrar sua primeira causa raiz</h2>
+              <p className="text-sm text-slate-500 leading-relaxed max-w-md mx-auto">
+                Você descreve o problema. A IA entrevista quem está no chão da operação e devolve
+                um diagnóstico com plano de ação.
+              </p>
             </div>
-            <p className="text-base font-medium text-slate-900 mb-1">Nenhuma investigação ainda</p>
-            <p className="text-sm text-slate-500 max-w-xs">
-              Crie sua primeira investigação para começar a identificar causas raiz com IA.
-            </p>
+
+            <div className="space-y-3 mb-8">
+              {[
+                {
+                  n: '1',
+                  t: 'Descreva o problema',
+                  d: 'Em uma conversa, você conta o que está acontecendo. A IA pergunta o que falta para entender: frequência, impacto, o que já foi tentado.',
+                },
+                {
+                  n: '2',
+                  t: 'Indique quem sabe do assunto',
+                  d: 'Cadastre as pessoas que convivem com o problema — operadores, encarregados, supervisores. O cargo orienta as perguntas de cada um.',
+                },
+                {
+                  n: '3',
+                  t: 'A IA conduz as entrevistas',
+                  d: 'Cada pessoa recebe um link e responde no próprio tempo. As respostas são cruzadas de forma anônima — ninguém sabe o que o outro disse.',
+                },
+                {
+                  n: '4',
+                  t: 'Receba o diagnóstico',
+                  d: 'Quando as conversas se esgotam, sai um relatório com a causa raiz, o grau de confiança e ações organizadas por prazo.',
+                },
+              ].map(p => (
+                <div key={p.n} className="flex gap-4 bg-white border border-slate-200 rounded-sm p-4">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-slate-900 text-[11px] font-bold text-white">
+                    {p.n}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 mb-0.5">{p.t}</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">{p.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center">
+              <Link
+                href="/investigations/new"
+                className="inline-flex items-center gap-2 bg-slate-900 text-white text-xs font-semibold uppercase tracking-wider py-3 px-6 rounded-sm hover:bg-slate-800 transition-all shadow-sm"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Criar primeira investigação
+              </Link>
+              <p className="text-[11px] text-slate-400 mt-3">
+                Leva cerca de 5 minutos. Você pode parar e retomar quando quiser.
+              </p>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
