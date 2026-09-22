@@ -241,14 +241,6 @@ export default function LandingPage() {
               Inteligência operacional para indústria brasileira
             </p>
           </div>
-          <div className="border-t border-slate-100 pt-4">
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              <strong className="text-slate-500">Science Mentorship Academy</strong> é uma marca registrada de{' '}
-              <strong className="text-slate-500">59.613.724 Victor Eduardo Alves da Silva Carvalho</strong> (MEI).{' '}
-              Elo é um produto desenvolvido e comercializado pela Science Mentorship Academy.
-              CNPJ 59.613.724/0001-53. Todos os direitos reservados.
-            </p>
-          </div>
         </div>
       </footer>
 
