@@ -3,6 +3,7 @@ import { env } from '@/lib/utils/env'
 import { buildInvestigationEnginePrompt } from './prompts'
 import { parseAIJson } from './utils'
 import { logUsage } from './cost-tracker'
+import { limparPreambulo } from './sanitize'
 import type { InvestigationEngineInput, InvestigationEngineOutput } from './types'
 
 const VALID_ACTIONS = ['ask_question', 'mark_saturated'] as const
@@ -60,7 +61,9 @@ function validateOutput(raw: unknown): InvestigationEngineOutput {
 
   return {
     action: r.action as InvestigationEngineOutput['action'],
-    next_question: typeof r.next_question === 'string' ? r.next_question : '',
+    // limparPreambulo: garantia determinística contra "Ótima pergunta!" e
+    // similares — o trabalhador responde, não pergunta
+    next_question: typeof r.next_question === 'string' ? limparPreambulo(r.next_question) : '',
     saturation_score: r.saturation_score,
     key_points_extracted: r.key_points_extracted as string[],
     ishikawa_categories_touched: filteredIshikawa,

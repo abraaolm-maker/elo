@@ -1,5 +1,8 @@
 import { db, schema } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
+import bcrypt from 'bcryptjs'
+import { checkRateLimit, resetRateLimit, rateLimitResponse, RULES, clientIp } from '@/lib/security/rate-limit'
+import { logError } from '@/lib/monitoring/logger'
 
 interface RouteParams { params: Promise<{ token: string }> }
 
@@ -38,6 +41,17 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
 
   if (!cpf) return Response.json({ error: 'CPF obrigatório.' }, { status: 400 })
 
+  // Rate limit por token e por IP — sem isto, com um link válido em mãos era
+  // possível iterar CPFs até acertar
+  const porToken = await checkRateLimit(`workerCpf:token:${token}`, RULES.workerCpf)
+  if (!porToken.allowed) {
+    return rateLimitResponse(porToken, 'Muitas tentativas de acesso. Aguarde alguns minutos e tente novamente.')
+  }
+  const porIp = await checkRateLimit(`workerCpf:ip:${clientIp(req)}`, RULES.workerCpf)
+  if (!porIp.allowed) {
+    return rateLimitResponse(porIp, 'Muitas tentativas de acesso. Aguarde alguns minutos e tente novamente.')
+  }
+
   const iw = await db
     .select({
       iw_id: schema.investigation_workers.id,
@@ -50,6 +64,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       company_name: schema.companies.name,
       manager_name: schema.managers.name,
       worker_cpf: schema.workers.cpf,
+      worker_cpf_hash: schema.workers.cpf_hash,
       worker_alias: schema.workers.anonymous_alias,
       worker_role: schema.workers.role,
     })
@@ -63,9 +78,39 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
 
   if (!iw) return Response.json({ error: 'Link inválido.' }, { status: 404 })
 
-  const cpfCadastrado = (iw.worker_cpf ?? '').replace(/\D/g, '')
-  if (!cpfCadastrado) return Response.json({ error: 'Trabalhador não possui CPF cadastrado. Fale com seu gestor.' }, { status: 400 })
-  if (cpf !== cpfCadastrado) return Response.json({ error: 'CPF incorreto.' }, { status: 401 })
+  // CPF é dado pessoal sensível (LGPD) — a comparação usa bcrypt.
+  // Registros antigos guardam o CPF em texto plano; nesse caso validamos contra
+  // o texto e migramos para hash na hora, apagando o valor original.
+  const cpfPlano = (iw.worker_cpf ?? '').replace(/\D/g, '')
+  const cpfHash = iw.worker_cpf_hash
+
+  if (!cpfHash && !cpfPlano) {
+    return Response.json({ error: 'Trabalhador não possui CPF cadastrado. Fale com seu gestor.' }, { status: 400 })
+  }
+
+  let cpfConfere: boolean
+  if (cpfHash) {
+    cpfConfere = await bcrypt.compare(cpf, cpfHash)
+  } else {
+    cpfConfere = cpf === cpfPlano
+    if (cpfConfere) {
+      try {
+        const novoHash = await bcrypt.hash(cpf, 10)
+        await db
+          .update(schema.workers)
+          .set({ cpf_hash: novoHash, cpf: null })
+          .where(eq(schema.workers.id, iw.worker_id))
+      } catch (err) {
+        await logError('api/worker/token', err, { extra: { etapa: 'migracao_cpf_hash' } })
+      }
+    }
+  }
+
+  if (!cpfConfere) return Response.json({ error: 'CPF incorreto.' }, { status: 401 })
+
+  // Acesso válido: zera os contadores de tentativa
+  await resetRateLimit(`workerCpf:token:${token}`)
+  await resetRateLimit(`workerCpf:ip:${clientIp(req)}`)
 
   if (iw.investigation_status !== 'active') {
     return Response.json({ error: 'Esta investigação não está ativa no momento.' }, { status: 400 })

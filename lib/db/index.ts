@@ -24,5 +24,30 @@ function buildDb() {
   return drizzle(client, { schema })
 }
 
-export const db = buildDb()
+type Db = ReturnType<typeof buildDb>
+
+let instancia: Db | null = null
+
+function getDb(): Db {
+  if (!instancia) instancia = buildDb()
+  return instancia
+}
+
+/**
+ * Conexão preguiçosa: o cliente só é construído no primeiro acesso real a uma
+ * propriedade, não no import do módulo.
+ *
+ * Isso importa no build: o Next avalia cada rota para coletar metadados, e uma
+ * conexão criada no import fazia o build inteiro falhar quando as credenciais
+ * do Turso não estavam presentes no ambiente. Em runtime o comportamento é o
+ * mesmo — a instância é criada uma vez e reaproveitada.
+ */
+export const db = new Proxy({} as Db, {
+  get(_alvo, prop, receiver) {
+    const real = getDb() as unknown as Record<string | symbol, unknown>
+    const valor = Reflect.get(real, prop, receiver)
+    return typeof valor === 'function' ? valor.bind(real) : valor
+  },
+})
+
 export { schema }

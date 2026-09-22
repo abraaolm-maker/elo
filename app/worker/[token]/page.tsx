@@ -233,10 +233,53 @@ export default function WorkerPortal() {
             disabled={loginLoading}
             className="w-full bg-teal-600 text-white rounded-lg py-3 text-sm font-medium hover:bg-teal-700 disabled:opacity-50 transition-colors"
           >
-            {loginLoading ? 'Verificando...' : 'Entrar'}
+            {loginLoading ? 'Verificando...' : 'Entrar e participar'}
           </button>
         </form>
-        <p className="text-center text-xs text-slate-400 mt-6">Suas respostas são anônimas e confidenciais.</p>
+
+        {/* Aviso de privacidade — exigência da LGPD e condição para que o
+            trabalhador responda com franqueza */}
+        <div className="mt-6 pt-5 border-t border-slate-100">
+          <p className="text-[11px] font-semibold tracking-wider text-slate-500 uppercase mb-2">
+            Antes de começar
+          </p>
+          <ul className="space-y-2 text-xs text-slate-600 leading-relaxed">
+            <li className="flex gap-2">
+              <span className="text-teal-600 shrink-0">•</span>
+              <span>
+                <strong>Seu nome nunca aparece.</strong> {managerName ? `${managerName} e a` : 'A'} liderança
+                recebe um relatório onde você é identificado apenas como
+                &ldquo;Colaborador&rdquo; e pelo seu cargo.
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-teal-600 shrink-0">•</span>
+              <span>
+                <strong>Ninguém vê suas respostas individualmente.</strong> Elas entram em uma
+                análise conjunta com as demais. O relatório final mostra as causas encontradas,
+                não quem disse o quê.
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-teal-600 shrink-0">•</span>
+              <span>
+                <strong>O CPF serve só para confirmar que é você.</strong> É guardado de forma
+                criptografada e não aparece em nenhum relatório.
+              </span>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-teal-600 shrink-0">•</span>
+              <span>
+                <strong>Participar é voluntário.</strong> Você pode parar a qualquer momento
+                fechando esta página.
+              </span>
+            </li>
+          </ul>
+          <p className="text-[11px] text-slate-400 leading-relaxed mt-3">
+            Ao entrar, você concorda que suas respostas sejam usadas de forma anonimizada nesta
+            investigação, conforme a Lei Geral de Proteção de Dados (LGPD).
+          </p>
+        </div>
       </div>
     </div>
   )

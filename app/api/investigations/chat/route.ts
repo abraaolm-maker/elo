@@ -5,6 +5,10 @@ import Anthropic from '@anthropic-ai/sdk'
 import crypto from 'crypto'
 import { env } from '@/lib/utils/env'
 import { logUsage } from '@/lib/ai/cost-tracker'
+import { canCreateInvestigation } from '@/lib/billing/plan-limits'
+import { checkRateLimit, rateLimitResponse, RULES } from '@/lib/security/rate-limit'
+import { logError } from '@/lib/monitoring/logger'
+import { limparPreambulo } from '@/lib/ai/sanitize'
 
 const anthropic = new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') })
 
@@ -216,6 +220,12 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ error: 'Mensagens inválidas' }, { status: 400 })
     }
 
+    // Rate limit por gestor — protege a cota da Anthropic contra loop ou abuso
+    const rl = await checkRateLimit(`aiChat:${session.managerId}`, RULES.aiChat)
+    if (!rl.allowed) {
+      return rateLimitResponse(rl, 'Muitas mensagens em pouco tempo. Aguarde alguns minutos antes de continuar.')
+    }
+
     // Fetch existing company context from DB
     let existingContext: CompanyContext | null = null
     try {
@@ -269,12 +279,21 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if (!parsed) {
-      console.error('[chat] Falha total ao parsear JSON. Texto bruto:', rawText.slice(0, 200))
+      await logError('api/investigations/chat', new Error('Falha ao parsear JSON da IA'), {
+        companyId: session.companyId,
+        extra: { trecho: rawText.slice(0, 200) },
+      })
       return Response.json({
-        message: rawText.trim() || 'Desculpe, tive um problema. Pode repetir?',
+        message: limparPreambulo(rawText.trim()) || 'Desculpe, tive um problema. Pode repetir?',
         updates: {},
         investigation_id: null,
       }, { status: 200 })
+    }
+
+    // Garantia determinística contra preâmbulos ("Ótima pergunta!"), que não
+    // fazem sentido aqui — quem pergunta é a IA, o gestor apenas responde
+    if (typeof parsed.message === 'string') {
+      parsed.message = limparPreambulo(parsed.message)
     }
 
     // Save company_context if AI returned one
@@ -310,38 +329,16 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if (prontoAgora && draftComUpdates.titulo && draftComUpdates.descricao_problema && draftComUpdates.participantes.length > 0) {
-      // Verificar limites do plano antes de criar
-      try {
-        const company = await db.select().from(schema.companies).where(eq(schema.companies.id, session.companyId)).get()
-        if (company) {
-          const planCfg = await db.select().from(schema.plan_configs).where(eq(schema.plan_configs.plan, company.plan)).get()
-          if (planCfg) {
-            if (planCfg.max_investigations !== -1) {
-              const [invCount] = await db.select({ total: count() }).from(schema.investigations).where(eq(schema.investigations.company_id, session.companyId))
-              if ((invCount?.total ?? 0) >= planCfg.max_investigations) {
-                return Response.json({
-                  ok: true,
-                  message: `Sua empresa atingiu o limite de ${planCfg.max_investigations} investigações do plano ${planCfg.label}. Entre em contato com o suporte para fazer upgrade.`,
-                  draft: draftComUpdates,
-                  investigationId: null,
-                })
-              }
-            }
-            if (planCfg.max_cost_brl !== -1) {
-              const { sum } = await import('drizzle-orm')
-              const [costRow] = await db.select({ total: sum(schema.api_usage_logs.cost_brl) }).from(schema.api_usage_logs).where(eq(schema.api_usage_logs.company_id, session.companyId))
-              if (Number(costRow?.total ?? 0) >= planCfg.max_cost_brl) {
-                return Response.json({
-                  ok: true,
-                  message: `Sua empresa atingiu o limite de custo de IA (R$ ${planCfg.max_cost_brl.toFixed(2)}) do plano ${planCfg.label}. Entre em contato com o suporte para fazer upgrade.`,
-                  draft: draftComUpdates,
-                  investigationId: null,
-                })
-              }
-            }
-          }
-        }
-      } catch { /* se plan_configs não existir, não bloqueia */ }
+      // Limites do plano — mesma verificação de POST /api/investigations
+      const limite = await canCreateInvestigation(session.companyId)
+      if (!limite.ok) {
+        return Response.json({
+          ok: true,
+          message: limite.reason,
+          draft: draftComUpdates,
+          investigationId: null,
+        })
+      }
 
       investigationId = crypto.randomUUID()
 

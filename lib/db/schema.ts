@@ -28,7 +28,8 @@ export const workers = sqliteTable('workers', {
   company_id:       text('company_id').notNull().references(() => companies.id),
   name:             text('name').notNull(),
   full_name:        text('full_name'),
-  cpf:              text('cpf'),
+  cpf:              text('cpf'),       // legado — mantido para migração; não usar em novas comparações
+  cpf_hash:         text('cpf_hash'),  // bcrypt do CPF (só dígitos) — usado na autenticação do worker
   role:             text('role').notNull(),
   role_description: text('role_description'),
   whatsapp_number:  text('whatsapp_number').notNull(),
@@ -151,6 +152,43 @@ export const api_usage_logs = sqliteTable('api_usage_logs', {
 })
 export type ApiUsageLog    = typeof api_usage_logs.$inferSelect
 export type NewApiUsageLog = typeof api_usage_logs.$inferInsert
+
+// ─── RATE_LIMITS ──────────────────────────────────────────────────────────────
+// Controle de tentativas por chave (ex: "login:email@x.com", "cpf:<token>").
+// Persistido no banco porque a Vercel roda múltiplas instâncias serverless —
+// um contador em memória não seria compartilhado entre elas.
+export const rate_limits = sqliteTable('rate_limits', {
+  key:          text('key').primaryKey(),
+  count:        integer('count').notNull().default(0),
+  window_start: text('window_start').notNull(),
+  blocked_until: text('blocked_until'),
+})
+export type RateLimit = typeof rate_limits.$inferSelect
+
+// ─── ERROR_LOGS ───────────────────────────────────────────────────────────────
+export const error_logs = sqliteTable('error_logs', {
+  id:               text('id').primaryKey(),
+  level:            text('level').notNull().default('error'), // 'error' | 'warn'
+  source:           text('source').notNull(),                 // ex: 'api/worker/messages'
+  message:          text('message').notNull(),
+  stack:            text('stack'),
+  context:          text('context'),                          // JSON livre (sem dados sensíveis)
+  company_id:       text('company_id'),
+  investigation_id: text('investigation_id'),
+  created_at:       text('created_at').notNull().default(sql`(datetime('now'))`),
+})
+export type ErrorLog    = typeof error_logs.$inferSelect
+export type NewErrorLog = typeof error_logs.$inferInsert
+
+// ─── PASSWORD_RESETS ──────────────────────────────────────────────────────────
+export const password_resets = sqliteTable('password_resets', {
+  token:      text('token').primaryKey(),   // hash do token — o valor cru só vai no link
+  manager_id: text('manager_id').notNull().references(() => managers.id),
+  expires_at: text('expires_at').notNull(),
+  used_at:    text('used_at'),
+  created_at: text('created_at').notNull().default(sql`(datetime('now'))`),
+})
+export type PasswordReset = typeof password_resets.$inferSelect
 
 // ─── Tipos inferidos ──────────────────────────────────────────────────────────
 export type Company                = typeof companies.$inferSelect

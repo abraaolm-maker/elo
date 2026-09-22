@@ -2,6 +2,9 @@ import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
 import { db, schema } from '@/lib/db'
 import { eq, and, inArray, count } from 'drizzle-orm'
 import crypto from 'crypto'
+import { canCreateInvestigation } from '@/lib/billing/plan-limits'
+import { logError } from '@/lib/monitoring/logger'
+import { hashCpf } from '@/lib/security/cpf'
 
 // Gerar alias sequencial: Colaborador A…Z, AA, AB…
 async function gerarAlias(companyId: string): Promise<string> {
@@ -93,6 +96,13 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ error: 'Adicione pelo menos um participante.' }, { status: 400 })
     }
 
+    // Limites do plano — mesma verificação da rota de chat, para que esta rota
+    // não sirva de atalho para ultrapassar a cota contratada
+    const limite = await canCreateInvestigation(session.companyId)
+    if (!limite.ok) {
+      return Response.json({ error: limite.reason }, { status: 403 })
+    }
+
     // Criar investigação
     const invId = crypto.randomUUID()
     await db.insert(schema.investigations).values({
@@ -156,7 +166,7 @@ export async function POST(request: Request): Promise<Response> {
           // Criar novo worker (sem WhatsApp ou WhatsApp não duplicado)
           const alias = await gerarAlias(session.companyId)
           const newId = crypto.randomUUID()
-          const cpfDigits = p.cpf?.replace(/\D/g, '') ?? null
+          const cpfHash = await hashCpf(p.cpf)
           // Sem WhatsApp: usar placeholder único para satisfazer a coluna NOT NULL
           const whatsappFinal = numLimpo || `portal:${newId}`
           await db.insert(schema.workers).values({
@@ -164,7 +174,8 @@ export async function POST(request: Request): Promise<Response> {
             company_id: session.companyId,
             name: p.name.trim(),
             full_name: p.full_name?.trim() ?? null,
-            cpf: cpfDigits && cpfDigits.length === 11 ? cpfDigits : null,
+            cpf: null,        // nunca gravar CPF em texto plano
+            cpf_hash: cpfHash,
             role: p.role.trim(),
             role_description: p.role_description?.trim() ?? null,
             whatsapp_number: whatsappFinal,

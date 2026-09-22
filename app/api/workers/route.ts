@@ -2,6 +2,7 @@ import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
 import { db, schema } from '@/lib/db'
 import { eq, and, count } from 'drizzle-orm'
 import crypto from 'crypto'
+import { hashCpf } from '@/lib/security/cpf'
 
 // Gerar alias sequencial: Colaborador A…Z, AA, AB…
 function generateAlias(index: number): string {
@@ -87,7 +88,8 @@ export async function POST(request: Request): Promise<Response> {
       company_id: session.companyId,
       name,
       full_name: full_name || null,
-      cpf: cpf || null,
+      cpf: null,                      // nunca gravar CPF em texto plano
+      cpf_hash: await hashCpf(cpf),
       role,
       role_description: role_description || null,
       whatsapp_number: whatsapp_number || `portal:${newId}`,

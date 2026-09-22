@@ -2,6 +2,12 @@ import { db } from '@/lib/db'
 import { sql } from 'drizzle-orm'
 import { createHash, timingSafeEqual, randomBytes } from 'crypto'
 
+// Esta rota abre conexão com o banco. Sem isto, o Next tenta avaliá-la durante
+// a coleta de dados do build e o build falha quando as credenciais do Turso não
+// estão no ambiente local.
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 async function runSafe(sqlStr: string, label: string): Promise<string> {
   try {
     await db.run(sql.raw(sqlStr))
@@ -224,6 +230,46 @@ export async function GET(request: Request) {
 
   // Colunas em reports
   results.push(await runSafe(`ALTER TABLE reports ADD COLUMN confidence_justification TEXT`, 'reports.confidence_justification'))
+
+  // Coluna de hash do CPF (o CPF em texto plano vira legado)
+  results.push(await runSafe(`ALTER TABLE workers ADD COLUMN cpf_hash TEXT`, 'workers.cpf_hash'))
+
+  // Tabela rate_limits — controle de tentativas (login, CPF, chat de IA)
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      key           TEXT PRIMARY KEY,
+      count         INTEGER NOT NULL DEFAULT 0,
+      window_start  TEXT NOT NULL,
+      blocked_until TEXT
+    )
+  `, 'tabela rate_limits'))
+
+  // Tabela error_logs — monitoramento de erros em produção
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS error_logs (
+      id               TEXT PRIMARY KEY,
+      level            TEXT NOT NULL DEFAULT 'error',
+      source           TEXT NOT NULL,
+      message          TEXT NOT NULL,
+      stack            TEXT,
+      context          TEXT,
+      company_id       TEXT,
+      investigation_id TEXT,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'tabela error_logs'))
+  results.push(await runSafe(`CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at DESC)`, 'idx error_logs'))
+
+  // Tabela password_resets — recuperação de senha do gestor
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      token      TEXT PRIMARY KEY,
+      manager_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at    TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'tabela password_resets'))
 
   // Tabela plan_configs
   results.push(await runSafe(`
