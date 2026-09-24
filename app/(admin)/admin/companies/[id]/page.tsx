@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { fmtData, fmtDataHoraCurta } from '@/lib/utils/date'
 
 interface ManagerRow { id: string; name: string; email: string; is_admin: boolean; is_active: boolean; created_at: string; total_cost_brl: number }
 interface InvRow { id: string; title: string; status: string; created_at: string }
@@ -453,7 +454,7 @@ export default function CompanyDetailPage() {
                   <td className="px-4 py-3">
                     <span className={"text-xs px-2 py-0.5 rounded " + (STATUS_COLORS[i.status] ?? '')}>{i.status}</span>
                   </td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{i.created_at.slice(0, 10)}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs">{fmtData(i.created_at)}</td>
                   <td className="px-4 py-3 text-right">
                     {i.status === 'completed' && (
                       <Link href={`/admin/relatorios/${i.id}`} className="text-xs text-teal-700 hover:underline">Ver relatório</Link>
@@ -490,7 +491,7 @@ export default function CompanyDetailPage() {
                   <td className="px-4 py-3 text-right font-mono text-xs">{l.input_tokens.toLocaleString('pt-BR')}</td>
                   <td className="px-4 py-3 text-right font-mono text-xs">{l.output_tokens.toLocaleString('pt-BR')}</td>
                   <td className="px-4 py-3 text-right font-mono text-xs">R$ {fmt(l.cost_brl)}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{l.created_at.slice(0, 16).replace('T', ' ')}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{fmtDataHoraCurta(l.created_at)}</td>
                 </tr>
               ))}
             </tbody>

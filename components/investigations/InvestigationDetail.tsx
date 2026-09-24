@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useToast } from '@/components/ui/toast'
+import { fmtHora, fmtDataHoraCurta } from '@/lib/utils/date'
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string; textColor: string; bg: string }> = {
   pending:   { label: 'Pendente',      dot: 'bg-slate-300',   textColor: 'text-slate-600',   bg: 'bg-slate-50 border-slate-200' },
@@ -715,7 +716,7 @@ export function InvestigationDetail(props: Props) {
                       {/* Status de acesso */}
                       {worker.first_accessed_at ? (
                         <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-sm font-medium whitespace-nowrap">
-                          ✓ Acessado em {new Date(worker.first_accessed_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          ✓ Acessado em {fmtDataHoraCurta(worker.first_accessed_at)}
                         </span>
                       ) : (
                         <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-sm font-medium whitespace-nowrap">
@@ -746,7 +747,7 @@ export function InvestigationDetail(props: Props) {
                     if (lastInbound && investigation.status === 'active') {
                       return (
                         <p className="text-[10px] font-mono text-slate-400 text-right mb-1">
-                          Última resposta: {new Date(lastInbound.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          Última resposta: {fmtDataHoraCurta(lastInbound.created_at)}
                         </p>
                       )
                     }
@@ -769,10 +770,7 @@ export function InvestigationDetail(props: Props) {
                   ) : (
                     workerMsgs.map(msg => {
                       const saiu = msg.direction === 'outbound'
-                      const hora = new Date(msg.created_at).toLocaleTimeString('pt-BR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
+                      const hora = fmtHora(msg.created_at)
                       return (
                         <div key={msg.id} className={`flex ${saiu ? 'justify-start' : 'justify-end'}`}>
                           <div

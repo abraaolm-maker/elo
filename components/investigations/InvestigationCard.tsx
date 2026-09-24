@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { fmtDataCompacta } from '@/lib/utils/date'
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string }> = {
   pending:   { label: 'Pendente',      dot: 'bg-slate-300',    text: 'text-slate-500' },
@@ -22,9 +23,7 @@ interface InvestigationCardProps {
 
 export function InvestigationCard({ investigation }: InvestigationCardProps) {
   const cfg = STATUS_CONFIG[investigation.status] ?? STATUS_CONFIG.pending
-  const date = new Date(investigation.created_at).toLocaleDateString('pt-BR', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  })
+  const date = fmtDataCompacta(investigation.created_at)
 
   return (
     <div className="group border border-slate-200 rounded-sm bg-white hover:border-slate-300 hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col">

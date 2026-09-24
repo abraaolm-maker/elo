@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { ReportPrintable } from '@/components/reports/ReportPrintable'
 import { ExportPdfButton } from '@/components/reports/ExportPdfButton'
 import { ConfirmDelete } from '@/components/ui/confirm-delete'
+import { fmtData } from '@/lib/utils/date'
 
 interface IshikawaBreakdown { mao_de_obra: string | null; maquina: string | null; metodo: string | null; material: string | null; meio_ambiente: string | null; medicao: string | null }
 interface SourceSummary { alias: string; role: string; key_points: string[] }
@@ -80,7 +81,7 @@ export default function AdminRelatorioPage() {
           <div className="flex gap-4 mt-2 text-xs text-slate-500">
             <span>{company_name}</span>
             <span>·</span>
-            <span>{investigation.created_at.slice(0, 10)}</span>
+            <span>{fmtData(investigation.created_at)}</span>
             <span>·</span>
             <span>Custo: R$ {fmt(cost_brl)}</span>
           </div>

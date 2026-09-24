@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { fmtDataHora, diaBrasilia } from '@/lib/utils/date'
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -92,8 +93,12 @@ function useFilteredData(stats: StatsData, filters: Filters) {
         if (co && inv.company_name !== co.name) return false
       }
       if (filters.status && inv.status !== filters.status) return false
-      if (filters.years.length > 0 && !filters.years.includes(inv.created_at.slice(0, 4))) return false
-      if (filters.month && inv.created_at.slice(5, 7) !== filters.month) return false
+      // Filtra pelo dia no fuso de Brasília — o mesmo que aparece na tela.
+      // Usar a data UTC crua jogaria investigações do fim da noite para o mês
+      // ou ano seguinte.
+      const dia = diaBrasilia(inv.created_at)
+      if (filters.years.length > 0 && !filters.years.includes(dia.slice(0, 4))) return false
+      if (filters.month && dia.slice(5, 7) !== filters.month) return false
       return true
     })
     let kpiTotal = stats.investigations.total, kpiActive = stats.investigations.active
@@ -113,14 +118,7 @@ function useFilteredData(stats: StatsData, filters: Filters) {
 const fmtN    = (n: number, dec = 0) => n.toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 const fmtR$   = (n: number) => 'R$ ' + fmtN(n, 2)
 const trunc   = (s: string, max = 18) => s.length > max ? s.slice(0, max) + '…' : s
-const fmtDateTime = (iso: string) => {
-  if (!iso) return '—'
-  // Normaliza "2024-01-15 10:30:00" → "2024-01-15T10:30:00"
-  const normalized = iso.includes('T') ? iso : iso.replace(' ', 'T')
-  const d = new Date(normalized)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
+const fmtDateTime = fmtDataHora
 
 // ─── Ícones ───────────────────────────────────────────────────────────────────
 const IconSearch = () => (

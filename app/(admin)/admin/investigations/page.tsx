@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { ConfirmDelete } from '@/components/ui/confirm-delete'
+import { fmtData } from '@/lib/utils/date'
 
 interface Inv { id: string; title: string; status: string; company_name: string; company_id: string; created_at: string; cost_brl: number; completed_at: string | null }
 interface Company { id: string; name: string }
@@ -137,7 +138,7 @@ function InvestigationsTable() {
                   <td className="px-4 py-3 font-medium text-slate-900">{i.title}</td>
                   <td className="px-4 py-3 text-slate-500">{i.company_name}</td>
                   <td className="px-4 py-3"><span className={"text-xs px-2 py-0.5 rounded " + (STATUS_COLORS[i.status] ?? '')}>{i.status}</span></td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{i.created_at.slice(0, 10)}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{fmtData(i.created_at)}</td>
                   <td className="px-4 py-3 text-right font-mono text-xs">R$ {fmt(i.cost_brl)}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-3">

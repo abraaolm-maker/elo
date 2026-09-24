@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ActionPlanTimeframe } from '@/lib/ai/types'
+import { fmtDataExtenso, fmtMesAno } from '@/lib/utils/date'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -64,17 +65,8 @@ function confidenceBand(score: number): { label: string; reading: string } {
   return { label: 'Baixa', reading: 'Evidências limitadas — tratar como hipótese a confirmar.' }
 }
 
-function fmtDate(iso: string): string {
-  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T'))
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-}
-
-function fmtMonthYear(iso: string): string {
-  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T'))
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-}
+const fmtDate = fmtDataExtenso
+const fmtMonthYear = fmtMesAno
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 

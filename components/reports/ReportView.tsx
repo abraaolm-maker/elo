@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useToast } from '@/components/ui/toast'
 import { ReportPrintable } from './ReportPrintable'
 import { ExportPdfButton } from './ExportPdfButton'
+import { fmtDataHora } from '@/lib/utils/date'
 import type { IshikawaBreakdownOutput, SourceSummaryOutput, ActionPlanTimeframe } from '@/lib/ai/types'
 
 export interface ActionItemData {
@@ -252,9 +253,7 @@ function ActionPlanSection({ items }: { items: ActionItemData[] }) {
 
 // ─── ReportView principal ─────────────────────────────────────────────────────
 export function ReportView({ investigationTitle, report, problemDescription = '', companyName = '' }: ReportViewProps) {
-  const generatedAt = new Date(report.generated_at).toLocaleDateString('pt-BR', {
-    day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
+  const generatedAt = fmtDataHora(report.generated_at)
 
   return (
     <div className="space-y-8 max-w-4xl">

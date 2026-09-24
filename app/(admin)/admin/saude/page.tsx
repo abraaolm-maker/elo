@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { fmtDataHoraCurta, fmtData } from '@/lib/utils/date'
 
 interface StuckInv { id: string; title: string; status: string; company_name: string; created_at: string; cost_brl: number }
 
@@ -14,11 +15,7 @@ interface ErroLog {
   created_at: string
 }
 
-function fmtQuando(iso: string): string {
-  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z')
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
+const fmtQuando = fmtDataHoraCurta
 
 /** Lista de erros capturados em produção. */
 function PainelErros() {
@@ -223,7 +220,7 @@ export default function AdminSaudePage() {
                     <td className="px-4 py-3">
                       <span className={"text-xs px-2 py-0.5 rounded " + (STATUS_COLORS[inv.status] ?? '')}>{inv.status}</span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{inv.created_at.slice(0, 10)}</td>
+                    <td className="px-4 py-3 text-xs text-slate-500">{fmtData(inv.created_at)}</td>
                     <td className="px-4 py-3 text-right">
                       {successId === inv.id ? (
                         <span className="text-xs text-green-600 font-medium">Relatório gerado!</span>

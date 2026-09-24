@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { fmtDataCompacta } from '@/lib/utils/date'
 
 interface Gestor {
   id: string
@@ -499,7 +500,7 @@ function CardEmpresa({ empresa, onAtualizado }: { empresa: Empresa; onAtualizado
                     cancelled: { dot: 'bg-red-400',     text: 'text-red-600',     label: 'Cancelado'    },
                   }
                   const s = statusCfg[inv.status] ?? statusCfg.pending
-                  const data = new Date(inv.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: '2-digit' })
+                  const data = fmtDataCompacta(inv.created_at)
                   return (
                     <div key={inv.id} className="flex items-center justify-between gap-4 border border-slate-200 rounded-sm bg-white px-4 py-2.5 hover:border-slate-300 transition-colors">
                       <p className="text-sm text-slate-900 font-medium truncate flex-1">{inv.title}</p>

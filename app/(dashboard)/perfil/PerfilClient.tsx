@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
+import { fmtDataExtenso } from '@/lib/utils/date'
 
 interface Props {
   id: string
@@ -177,9 +178,7 @@ function SecaoSenha() {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export function PerfilClient({ name, email, createdAt }: Props) {
-  const criadoEm = new Date(createdAt).toLocaleDateString('pt-BR', {
-    day: '2-digit', month: 'long', year: 'numeric',
-  })
+  const criadoEm = fmtDataExtenso(createdAt)
 
   return (
     <>
