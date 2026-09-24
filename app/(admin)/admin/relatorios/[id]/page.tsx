@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ReportPrintable } from '@/components/reports/ReportPrintable'
 import { ExportPdfButton } from '@/components/reports/ExportPdfButton'
+import { ConfirmDelete } from '@/components/ui/confirm-delete'
 
 interface IshikawaBreakdown { mao_de_obra: string | null; maquina: string | null; metodo: string | null; material: string | null; meio_ambiente: string | null; medicao: string | null }
 interface SourceSummary { alias: string; role: string; key_points: string[] }
@@ -35,8 +37,17 @@ function parseJson<T>(s: string | null | undefined, fallback: T): T {
 
 export default function AdminRelatorioPage() {
   const { id } = useParams<{ id: string }>()
+  const router = useRouter()
   const [data, setData] = useState<PageData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [confirmando, setConfirmando] = useState(false)
+
+  async function apagarRelatorio() {
+    const r = await fetch(`/api/admin/relatorios/${id}`, { method: 'DELETE' })
+    const j = await r.json() as { error?: string }
+    if (!r.ok) throw new Error(j.error ?? `Falha (HTTP ${r.status})`)
+    router.push('/admin/saude')
+  }
 
   useEffect(() => {
     fetch(`/api/admin/relatorios/${id}`)
@@ -74,8 +85,43 @@ export default function AdminRelatorioPage() {
             <span>Custo: R$ {fmt(cost_brl)}</span>
           </div>
         </div>
-        {report && <ExportPdfButton className="shrink-0" />}
+        {report && (
+          <div className="flex items-center gap-2 shrink-0">
+            <ExportPdfButton />
+            <button
+              onClick={() => setConfirmando(true)}
+              className="no-print inline-flex items-center gap-1.5 border border-slate-200 text-slate-500 text-[10px] font-semibold uppercase tracking-wider py-2.5 px-4 rounded-sm hover:border-red-200 hover:text-red-600 hover:bg-red-50 transition-colors"
+              title="Apagar o relatório e permitir reprocessamento"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+              Apagar relatório
+            </button>
+          </div>
+        )}
       </div>
+
+      {confirmando && (
+        <ConfirmDelete
+          nomeItem={investigation.title}
+          rotuloConfirmar="Apagar relatório"
+          onCancelar={() => setConfirmando(false)}
+          onConfirmar={apagarRelatorio}
+          descricao={
+            <>
+              <p className="mb-2">
+                Apaga <strong>apenas o relatório</strong> e seu plano de ação. As conversas com
+                os trabalhadores são preservadas.
+              </p>
+              <p className="text-xs text-slate-500">
+                A investigação volta para &ldquo;saturada&rdquo; e aparece em Saúde do sistema,
+                onde você pode gerar o relatório de novo.
+              </p>
+            </>
+          }
+        />
+      )}
 
       <div className="mb-6 bg-white border border-slate-200 rounded-sm p-5">
         <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Problema investigado</p>

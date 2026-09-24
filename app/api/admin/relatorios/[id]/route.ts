@@ -1,6 +1,9 @@
 import { db, schema } from '@/lib/db'
 import { requireAdmin, isForbiddenError, forbiddenResponse, unauthorizedResponse, isUnauthorizedError } from '@/lib/auth/middleware'
 import { eq, sum } from 'drizzle-orm'
+import { logError, logWarn } from '@/lib/monitoring/logger'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -69,7 +72,62 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   } catch (error) {
     if (isUnauthorizedError(error)) return unauthorizedResponse()
     if (isForbiddenError(error)) return forbiddenResponse()
-    console.error('[admin/relatorios]', error)
+    await logError('api/admin/relatorios GET', error)
     return Response.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE — apaga apenas o relatório, preservando a investigação e as conversas.
+ *
+ * Útil quando o relatório saiu ruim: o admin apaga e reprocessa em
+ * Saúde do sistema, sem perder as respostas dos trabalhadores.
+ * O `id` da rota é o investigation_id (mesma convenção do GET).
+ */
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requireAdmin(request)
+    const { id: investigationId } = await params
+
+    const report = await db
+      .select({ id: schema.reports.id })
+      .from(schema.reports)
+      .where(eq(schema.reports.investigation_id, investigationId))
+      .get()
+
+    if (!report) return Response.json({ error: 'Relatório não encontrado' }, { status: 404 })
+
+    // action_items depende de reports — apagar primeiro
+    const acoes = await db
+      .select({ id: schema.action_items.id })
+      .from(schema.action_items)
+      .where(eq(schema.action_items.report_id, report.id))
+
+    await db.delete(schema.action_items).where(eq(schema.action_items.report_id, report.id))
+    await db.delete(schema.reports).where(eq(schema.reports.investigation_id, investigationId))
+
+    // Volta para 'saturated' para aparecer em Saúde do sistema e poder reprocessar
+    await db
+      .update(schema.investigations)
+      .set({ status: 'saturated', completed_at: null })
+      .where(eq(schema.investigations.id, investigationId))
+
+    await logWarn('api/admin/relatorios DELETE', 'Relatório apagado', {
+      investigationId,
+      extra: { acoesApagadas: acoes.length },
+    })
+
+    return Response.json({
+      data: {
+        apagado: true,
+        acoes_apagadas: acoes.length,
+        novo_status: 'saturated',
+      },
+    })
+  } catch (error) {
+    if (isUnauthorizedError(error)) return unauthorizedResponse()
+    if (isForbiddenError(error)) return forbiddenResponse()
+    await logError('api/admin/relatorios DELETE', error)
+    return Response.json({ error: 'Erro interno ao apagar relatório' }, { status: 500 })
   }
 }
