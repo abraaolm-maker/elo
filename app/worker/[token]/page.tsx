@@ -91,9 +91,15 @@ export default function WorkerPortal() {
     if (!text.trim() || sending) return
     setSending(true)
     setErrorMsg('')
-    const userMsg: Message = { id: crypto.randomUUID(), direction: 'inbound', content: text, content_type: 'text' }
+
+    // Balão otimista: some se o envio falhar, para o trabalhador não acreditar
+    // que respondeu quando a mensagem não chegou
+    const msgId = crypto.randomUUID()
+    const userMsg: Message = { id: msgId, direction: 'inbound', content: text, content_type: 'text' }
     setMessages(prev => [...prev, userMsg])
     setInput('')
+
+    const desfazer = () => setMessages(prev => prev.filter(m => m.id !== msgId))
 
     try {
       const res = await fetch(`/api/worker/${token}/messages`, {
@@ -101,8 +107,25 @@ export default function WorkerPortal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpf, content: text }),
       })
-      const json = await res.json()
-      if (!res.ok) { setErrorMsg(json.error); setSending(false); return }
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        desfazer()
+        setInput(text)  // devolve o texto para não obrigar a redigitar
+
+        // 401 = identificação perdida. Em vez de deixar o trabalhador num beco
+        // sem saída, volta para a tela de CPF para ele entrar de novo.
+        if (res.status === 401) {
+          setCpf('')
+          setLoginError('Precisamos confirmar seu CPF novamente para continuar.')
+          setPhase('login')
+        } else {
+          setErrorMsg(json.error ?? 'Não foi possível enviar. Tente novamente.')
+        }
+        setSending(false)
+        return
+      }
+
       if (json.data.outbound_message) {
         setMessages(prev => [...prev, json.data.outbound_message])
       }
@@ -110,7 +133,9 @@ export default function WorkerPortal() {
       setWorkerStatus(json.data.status)
       if (json.data.status === 'saturated') setPhase('done')
     } catch {
-      setErrorMsg('Erro ao enviar. Tente novamente.')
+      desfazer()
+      setInput(text)
+      setErrorMsg('Sem conexão. Verifique sua internet e tente de novo.')
     }
     setSending(false)
   }, [token, cpf, sending])
@@ -151,10 +176,17 @@ export default function WorkerPortal() {
 
     try {
       const res = await fetch(`/api/worker/${token}/audio`, { method: 'POST', body: fd })
-      const json = await res.json()
+      const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         setMessages(prev => prev.filter(m => m.id !== tempMsg.id))
-        setErrorMsg(json.error)
+        // Mesma recuperação do envio de texto: 401 volta para a tela de CPF
+        if (res.status === 401) {
+          setCpf('')
+          setLoginError('Precisamos confirmar seu CPF novamente para continuar.')
+          setPhase('login')
+        } else {
+          setErrorMsg(json.error ?? 'Não foi possível enviar o áudio. Tente novamente.')
+        }
         setSending(false)
         return
       }
