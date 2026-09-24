@@ -4,6 +4,7 @@ import { randomBytes, createHash } from 'crypto'
 import { checkRateLimit, rateLimitResponse, RULES, clientIp } from '@/lib/security/rate-limit'
 import { logError, logWarn } from '@/lib/monitoring/logger'
 import { enviarEmailRecuperacao } from '@/lib/email/sender'
+import { env } from '@/lib/utils/env'
 
 const VALIDADE_MIN = 60
 
@@ -48,7 +49,9 @@ export async function POST(request: Request): Promise<Response> {
       expires_at: expiraEm,
     })
 
-    const base = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
+    // env() remove o BOM que a Vercel grava no início da variável — sem isso o
+    // link de recuperação sai com caractere invisível e não funciona
+    const base = env('NEXT_PUBLIC_APP_URL').replace(/\/$/, '')
     const link = `${base}/redefinir-senha?token=${tokenCru}`
 
     const enviado = await enviarEmailRecuperacao(email, manager.name, link, VALIDADE_MIN)

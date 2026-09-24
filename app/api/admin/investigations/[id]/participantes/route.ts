@@ -2,6 +2,7 @@ import { db, schema } from '@/lib/db'
 import { requireAdmin, isForbiddenError, forbiddenResponse, unauthorizedResponse, isUnauthorizedError } from '@/lib/auth/middleware'
 import { eq, sql } from 'drizzle-orm'
 import { logError, logWarn } from '@/lib/monitoring/logger'
+import { env } from '@/lib/utils/env'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     if (!inv) return Response.json({ error: 'Investigação não encontrada' }, { status: 404 })
 
-    const base = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
+    // env() remove o BOM que a Vercel às vezes grava no início da variável —
+    // sem isso o link sai com um caractere invisível antes do "https" e não abre
+    const base = env('NEXT_PUBLIC_APP_URL').replace(/\/$/, '')
 
     const linhas = await db
       .select({
