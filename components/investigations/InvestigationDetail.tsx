@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useToast } from '@/components/ui/toast'
 import { fmtHora, fmtDataHoraCurta } from '@/lib/utils/date'
+import { useLiveRefresh } from '@/lib/hooks/use-live-refresh'
+import { LiveIndicator } from './LiveIndicator'
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string; textColor: string; bg: string }> = {
   pending:   { label: 'Pendente',      dot: 'bg-slate-300',   textColor: 'text-slate-600',   bg: 'bg-slate-50 border-slate-200' },
@@ -372,26 +374,22 @@ export function InvestigationDetail(props: Props) {
   const toast = useToast()
 
   const refreshData = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/investigations/${props.investigation.id}`)
-      if (!res.ok) return
-      const { data } = await res.json() as ApiDetailResponse
-      setInvestigation(data.investigation)
-      setWorkers(data.workers)
-      setMessages(data.messages)
-    } catch {
-      // falha silenciosa
-    }
+    const res = await fetch(`/api/investigations/${props.investigation.id}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const { data } = await res.json() as ApiDetailResponse
+    setInvestigation(data.investigation)
+    setWorkers(data.workers)
+    setMessages(data.messages)
   }, [props.investigation.id])
 
-  // Polling adaptativo: mais frequente quando active, mais lento quando saturating
-  useEffect(() => {
-    const status = investigation.status
-    if (status === 'completed' || status === 'cancelled') return
-    const delay = status === 'active' ? 8000 : 15000
-    const timer = setTimeout(() => void refreshData(), delay)
-    return () => clearTimeout(timer)
-  }, [investigation.status, refreshData, workers])
+  // Acompanhamento ao vivo. Enquanto a investigação está em andamento, as
+  // respostas aparecem sozinhas na tela; 4s em 'active' porque é quando o
+  // trabalhador está de fato respondendo.
+  const emAndamento = investigation.status !== 'completed' && investigation.status !== 'cancelled'
+  const live = useLiveRefresh(refreshData, {
+    enabled: emAndamento,
+    intervalMs: investigation.status === 'active' ? 4000 : 10000,
+  })
 
   async function iniciar() {
     setErroInicio(null)
@@ -507,6 +505,13 @@ export function InvestigationDetail(props: Props) {
                 )}
                 {statusCfg.label}
               </div>
+              <LiveIndicator
+                ativo={emAndamento}
+                ultimaAtualizacao={live.ultimaAtualizacao}
+                atualizando={live.atualizando}
+                comFalha={live.comFalha}
+                onAtualizarAgora={live.atualizarAgora}
+              />
             </div>
             <h1 className="text-xl font-semibold text-slate-900 tracking-tight truncate">{investigation.title}</h1>
             <p className="text-sm text-slate-500 mt-1 line-clamp-2">{investigation.problem_description}</p>

@@ -1,6 +1,6 @@
 import { db, schema } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
-import bcrypt from 'bcryptjs'
+import { verificarCpf, hashCpf } from '@/lib/security/cpf'
 import { checkRateLimit, resetRateLimit, rateLimitResponse, RULES, clientIp } from '@/lib/security/rate-limit'
 import { logError } from '@/lib/monitoring/logger'
 
@@ -88,21 +88,21 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     return Response.json({ error: 'Trabalhador não possui CPF cadastrado. Fale com seu gestor.' }, { status: 400 })
   }
 
-  let cpfConfere: boolean
-  if (cpfHash) {
-    cpfConfere = await bcrypt.compare(cpf, cpfHash)
-  } else {
-    cpfConfere = cpf === cpfPlano
-    if (cpfConfere) {
-      try {
-        const novoHash = await bcrypt.hash(cpf, 10)
+  const cpfConfere = await verificarCpf(cpf, { cpf: iw.worker_cpf, cpf_hash: cpfHash })
+
+  // Migração preguiçosa: registros antigos ganham hash no primeiro acesso.
+  // O campo em texto plano só é limpo depois que o hash está gravado.
+  if (cpfConfere && !cpfHash) {
+    try {
+      const novoHash = await hashCpf(cpf)
+      if (novoHash) {
         await db
           .update(schema.workers)
           .set({ cpf_hash: novoHash, cpf: null })
           .where(eq(schema.workers.id, iw.worker_id))
-      } catch (err) {
-        await logError('api/worker/token', err, { extra: { etapa: 'migracao_cpf_hash' } })
       }
+    } catch (err) {
+      await logError('api/worker/token', err, { extra: { etapa: 'migracao_cpf_hash' } })
     }
   }
 

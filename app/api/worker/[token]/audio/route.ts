@@ -10,6 +10,7 @@ import { env } from '@/lib/utils/env'
 import type { InvestigationContext } from '@/lib/ai/types'
 import { canSpendOnAi } from '@/lib/billing/plan-limits'
 import { logWarn } from '@/lib/monitoring/logger'
+import { verificarCpf } from '@/lib/security/cpf'
 
 interface RouteParams { params: Promise<{ token: string }> }
 
@@ -35,6 +36,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       company_id: schema.investigations.company_id,
       manager_id: schema.investigations.manager_id,
       worker_cpf: schema.workers.cpf,
+      worker_cpf_hash: schema.workers.cpf_hash,
       worker_role: schema.workers.role,
       worker_role_description: schema.workers.role_description,
     })
@@ -45,7 +47,10 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .get()
 
   if (!iw) return Response.json({ error: 'Link inválido.' }, { status: 404 })
-  if ((iw.worker_cpf ?? '').replace(/\D/g, '') !== cpf) return Response.json({ error: 'Não autorizado.' }, { status: 401 })
+  const cpfOk = await verificarCpf(cpf, { cpf: iw.worker_cpf, cpf_hash: iw.worker_cpf_hash })
+  if (!cpfOk) {
+    return Response.json({ error: 'Sua sessão expirou. Recarregue a página e entre novamente com seu CPF.' }, { status: 401 })
+  }
   if (iw.investigation_status !== 'active') return Response.json({ error: 'Investigação não está ativa.' }, { status: 400 })
   if (iw.status === 'saturated') return Response.json({ error: 'Você já concluiu sua participação.' }, { status: 400 })
 
