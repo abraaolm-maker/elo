@@ -495,7 +495,7 @@ function CardEmpresa({ empresa, onAtualizado }: { empresa: Empresa; onAtualizado
                   const statusCfg: Record<string, { dot: string; text: string; label: string }> = {
                     pending:   { dot: 'bg-slate-300',   text: 'text-slate-500',   label: 'Pendente'     },
                     active:    { dot: 'bg-teal-500',    text: 'text-teal-700',    label: 'Em andamento' },
-                    saturated: { dot: 'bg-amber-400',   text: 'text-amber-700',   label: 'Saturando'    },
+                    saturated: { dot: 'bg-amber-400',   text: 'text-amber-700',   label: 'Aguardando relatório' },
                     completed: { dot: 'bg-emerald-500', text: 'text-emerald-700', label: 'Concluído'    },
                     cancelled: { dot: 'bg-red-400',     text: 'text-red-600',     label: 'Cancelado'    },
                   }

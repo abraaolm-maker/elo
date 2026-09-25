@@ -4,7 +4,7 @@ import { fmtDataCompacta } from '@/lib/utils/date'
 const STATUS_CONFIG: Record<string, { label: string; dot: string; text: string }> = {
   pending:   { label: 'Pendente',      dot: 'bg-slate-300',    text: 'text-slate-500' },
   active:    { label: 'Em andamento',  dot: 'bg-teal-500',     text: 'text-teal-700' },
-  saturated: { label: 'Saturando',     dot: 'bg-amber-400',    text: 'text-amber-700' },
+  saturated: { label: 'Aguardando relatório', dot: 'bg-amber-400', text: 'text-amber-700' },
   completed: { label: 'Concluído',     dot: 'bg-emerald-500',  text: 'text-emerald-700' },
   cancelled: { label: 'Cancelado',     dot: 'bg-red-400',      text: 'text-red-600' },
 }

@@ -54,7 +54,7 @@ const CHART_COLORS = ['#14b8a6','#0ea5e9','#8b5cf6','#f59e0b','#ef4444','#22c55e
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendente', active: 'Ativa', completed: 'Concluída',
-  cancelled: 'Cancelada', saturated: 'Saturada',
+  cancelled: 'Cancelada', saturated: 'Aguardando relatório',
 }
 
 // ─── Hook: count-up animado ───────────────────────────────────────────────────
@@ -453,13 +453,14 @@ function TabGeral({ stats, filterKey, filteredSeries, filteredCompanies, kpiTota
         <KpiCard label="Pendentes" value={kpiPending} icon={<IconClock />} iconBg="#FEF9E7" iconColor="#92740A" />
         <KpiCard label="Mensagens" value={kpiMessages > 0 ? kpiMessages : stats.total_messages} icon={<IconChat />} iconBg="#F3F0FF" iconColor="#6D42D6" />
         <KpiCard label="Custo IA" value={kpiCost} format="brl" icon={<IconCoin />} iconBg="#FEF2E7" iconColor="#C05A0B" />
+        {/* Deixou de ser alerta vermelho: aguardar o gestor gerar o relatório é
+            o fluxo normal desde que a geração passou a ser manual */}
         <KpiCard
-          label="Travadas"
+          label="Aguardando relatório"
           value={stats.investigations.saturated ?? 0}
-          icon={<IconAlert />}
-          iconBg="#FDE8E8" iconColor="#C0392B"
-          alert
-          sub="precisam de ação"
+          icon={<IconClock />}
+          iconBg="#FEF9E7" iconColor="#92740A"
+          sub="coleta encerrada"
         />
       </div>
 

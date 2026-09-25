@@ -181,24 +181,33 @@ export default function AdminSaudePage() {
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <h1 className="text-2xl font-semibold text-slate-900 mb-1">Saúde do sistema</h1>
-      <p className="text-sm text-slate-500 mb-8">Investigações travadas em &quot;saturated&quot; — precisam ter o relatório reprocessado manualmente</p>
+      <p className="text-sm text-slate-500 mb-8">
+        Investigações com a coleta encerrada e o relatório ainda não gerado
+      </p>
 
       {loading && <p className="text-sm text-slate-400">Carregando...</p>}
 
       {!loading && stuck.length === 0 && (
         <div className="bg-green-50 border border-green-200 rounded-sm px-5 py-6 text-center">
-          <p className="text-green-700 font-medium text-sm">Tudo certo — nenhuma investigação travada</p>
-          <p className="text-green-600 text-xs mt-1">Todas as investigações finalizadas geraram relatório com sucesso.</p>
+          <p className="text-green-700 font-medium text-sm">Nenhuma investigação aguardando relatório</p>
+          <p className="text-green-600 text-xs mt-1">Todas as coletas encerradas já têm relatório gerado.</p>
         </div>
       )}
 
       {!loading && stuck.length > 0 && (
         <>
-          <div className="bg-amber-50 border border-amber-200 rounded-sm px-4 py-3 mb-6 flex items-center gap-2 text-sm text-amber-700">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          {/* Estar aqui deixou de ser sinal de falha: desde que a geração passou a
+              ser manual, aguardar o gestor é o comportamento normal. Só vira
+              problema se ficar parado por muito tempo. */}
+          <div className="bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 mb-6 flex items-start gap-2 text-sm text-slate-600">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
             </svg>
-            {stuck.length} investigação(ões) precisam de atenção. Clique em &quot;Reprocessar&quot; para gerar o relatório manualmente.
+            <span>
+              {stuck.length} investigação(ões) com a coleta encerrada aguardando o gestor gerar o
+              relatório — isso é normal. Use &quot;Gerar relatório&quot; apenas se o gestor pedir
+              ajuda ou se a geração dele tiver falhado.
+            </span>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-sm overflow-hidden">
@@ -230,7 +239,7 @@ export default function AdminSaudePage() {
                           disabled={reprocessing === inv.id}
                           className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-sm hover:bg-teal-700 transition-colors disabled:opacity-50"
                         >
-                          {reprocessing === inv.id ? 'Gerando…' : 'Reprocessar relatório'}
+                          {reprocessing === inv.id ? 'Gerando…' : 'Gerar relatório'}
                         </button>
                       )}
                     </td>

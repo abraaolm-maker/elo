@@ -10,7 +10,9 @@ import { LiveIndicator } from './LiveIndicator'
 const STATUS_CONFIG: Record<string, { label: string; dot: string; textColor: string; bg: string }> = {
   pending:   { label: 'Pendente',      dot: 'bg-slate-300',   textColor: 'text-slate-600',   bg: 'bg-slate-50 border-slate-200' },
   active:    { label: 'Em andamento',  dot: 'bg-teal-500',    textColor: 'text-teal-700',    bg: 'bg-teal-50 border-teal-200' },
-  saturated: { label: 'Saturando',     dot: 'bg-amber-400',   textColor: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200' },
+  // 'saturated' = coleta encerrada, relatório aguardando decisão do gestor.
+  // "Saturando" (gerúndio) dava a entender que ainda estava em andamento.
+  saturated: { label: 'Aguardando relatório', dot: 'bg-amber-400', textColor: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
   completed: { label: 'Concluído',     dot: 'bg-emerald-500', textColor: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
   cancelled: { label: 'Cancelado',     dot: 'bg-red-400',     textColor: 'text-red-600',     bg: 'bg-red-50 border-red-200' },
 }

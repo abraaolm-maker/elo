@@ -8,7 +8,7 @@ const STATUS_LABELS: Record<string, string> = {
   all: 'Todos',
   pending: 'Pendente',
   active: 'Em andamento',
-  saturated: 'Saturando',
+  saturated: 'Aguardando relatório',
   completed: 'Concluído',
   cancelled: 'Cancelado',
 }
