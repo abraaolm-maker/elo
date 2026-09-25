@@ -20,6 +20,13 @@ export interface ReportInputData {
   allMessages: ReportMessageEntry[]
   workerAliases: WorkerAlias[]
   aliasMap: Map<string, { alias: string; role: string }>
+  /**
+   * Mensagens existentes no banco que ficaram de fora por não terem conteúdo —
+   * tipicamente áudios cuja transcrição falhou. Exposto para que o gestor veja
+   * na tela que aquela informação não chegou à IA, em vez de o descarte
+   * acontecer em silêncio.
+   */
+  descartadasSemConteudo: number
 }
 
 /** Mensagens de um único worker — usado nas fases que processam fonte a fonte. */
@@ -69,5 +76,7 @@ export async function montarEntradaRelatorio(investigationId: string): Promise<R
       }
     })
 
-  return { allMessages, workerAliases, aliasMap }
+  const descartadasSemConteudo = msgRows.length - allMessages.length
+
+  return { allMessages, workerAliases, aliasMap, descartadasSemConteudo }
 }

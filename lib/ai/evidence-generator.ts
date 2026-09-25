@@ -6,6 +6,7 @@ import { logUsage } from './cost-tracker'
 import type {
   ReportMessageEntry, WorkerAlias, EvidenceItemOutput, EvidenceStrength, DivergenceOutput,
 } from './types'
+import type { Telemetria } from './report-phases'
 
 export interface EvidenceLayerInput {
   investigation: { title: string; problem_description: string }
@@ -73,19 +74,26 @@ function validar(raw: unknown): EvidenceLayerOutput {
   return { evidence_map, divergences, sensitive_observations }
 }
 
-/** Gera a camada de evidências do relatório gerencial (segunda chamada). */
-export async function generateEvidenceLayer(input: EvidenceLayerInput): Promise<EvidenceLayerOutput> {
+/** Gera a camada de evidências do relatório gerencial. */
+export async function generateEvidenceLayer(
+  input: EvidenceLayerInput
+): Promise<{ saida: EvidenceLayerOutput; telemetria: Telemetria }> {
   const client = new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') })
+  const corpo = JSON.stringify(input)
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 3000,
+    max_tokens: 4000,
     system: EVIDENCE_LAYER_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: JSON.stringify(input) }],
+    messages: [{ role: 'user', content: corpo }],
   })
 
   const bloco = response.content[0]
   if (bloco?.type !== 'text') throw new Error('Tipo de resposta inesperado')
+
+  if (response.stop_reason === 'max_tokens') {
+    throw new Error('A resposta da IA foi cortada pelo limite de tokens. Nada foi gravado — refaça esta etapa.')
+  }
 
   const resultado = validar(parseAIJson<unknown>(bloco.text))
 
@@ -101,5 +109,14 @@ export async function generateEvidenceLayer(input: EvidenceLayerInput): Promise<
     }).catch(() => {})
   }
 
-  return resultado
+  return {
+    saida: resultado,
+    telemetria: {
+      mensagens_enviadas: input.allMessages.length,
+      caracteres_enviados: corpo.length,
+      tokens_entrada: response.usage?.input_tokens ?? 0,
+      tokens_saida: response.usage?.output_tokens ?? 0,
+      truncada: false,
+    },
+  }
 }

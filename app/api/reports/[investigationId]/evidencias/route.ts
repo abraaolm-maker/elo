@@ -57,7 +57,7 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
 
     const { allMessages, workerAliases } = await montarEntradaRelatorio(investigationId)
 
-    const saida = await generateEvidenceLayer({
+    const { saida, telemetria } = await generateEvidenceLayer({
       investigation: { title: investigation.title, problem_description: investigation.problem_description },
       allMessages,
       workerAliases,
@@ -76,7 +76,13 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
       })
       .where(eq(schema.reports.investigation_id, investigationId))
 
-    return Response.json({ data: saida })
+    return Response.json({
+      data: saida,
+      diagnostico: {
+        ...telemetria,
+        itens: saida.evidence_map.length + saida.divergences.length + saida.sensitive_observations.length,
+      },
+    })
   } catch (error) {
     if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     await logError('api/reports/evidencias', error)

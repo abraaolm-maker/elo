@@ -6,6 +6,7 @@ import { useToast } from '@/components/ui/toast'
 import { fmtHora, fmtDataHoraCurta } from '@/lib/utils/date'
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh'
 import { LiveIndicator } from './LiveIndicator'
+import { ProgressoGeracao, type Etapa, type StatusEtapa, type Diagnostico } from './ProgressoGeracao'
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string; textColor: string; bg: string }> = {
   pending:   { label: 'Pendente',      dot: 'bg-slate-300',   textColor: 'text-slate-600',   bg: 'bg-slate-50 border-slate-200' },
@@ -386,6 +387,28 @@ export function InvestigationDetail(props: Props) {
   // Qual fase da geração está rodando — sem isso o gestor encara um botão
   // "gerando…" por mais de um minuto sem saber se travou
   const [etapa, setEtapa] = useState('')
+  // Acompanhamento detalhado: o que foi enviado à IA e o que voltou, etapa a
+  // etapa. Serve de conferência de que nenhuma conversa ficou pelo caminho.
+  const [etapas, setEtapas] = useState<Etapa[]>([])
+
+  function montarEtapas(qtdFontes: number): Etapa[] {
+    const lotes = Math.max(1, Math.ceil(qtdFontes / 2))
+    return [
+      { id: 'analise', rotulo: 'Analisando as conversas', status: 'pendente' },
+      ...Array.from({ length: lotes }, (_, i) => ({
+        id: `fontes-${i}`,
+        rotulo: `Resumindo fontes (lote ${i + 1} de ${lotes})`,
+        status: 'pendente' as StatusEtapa,
+      })),
+      { id: 'recomendacoes', rotulo: 'Redigindo recomendações', status: 'pendente' },
+      { id: 'plano', rotulo: 'Montando plano de ação', status: 'pendente', opcional: true },
+      { id: 'evidencias', rotulo: 'Mapeando evidências', status: 'pendente', opcional: true },
+    ]
+  }
+
+  function atualizarEtapa(id: string, patch: Partial<Etapa>) {
+    setEtapas(prev => prev.map(e => (e.id === id ? { ...e, ...patch } : e)))
+  }
   const [erroInicio, setErroInicio] = useState<string | null>(null)
   const [editandoWorker, setEditandoWorker] = useState<WorkerParticipant | null>(null)
   const [adicionandoParticipante, setAdicionandoParticipante] = useState(false)
@@ -453,19 +476,37 @@ export function InvestigationDetail(props: Props) {
       // função (limite de 60s). Nenhuma conversa é encurtada para caber: o que
       // se divide é o trabalho. Cada etapa grava o que produziu, então uma
       // falha no meio não descarta o que já ficou pronto.
-      const chamarFase = async (corpo: Record<string, unknown>) => {
-        const r = await fetch(`/api/reports/${investigation.id}/fase`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(corpo),
-        })
-        const j = await r.json().catch(() => ({})) as { data?: Record<string, unknown>; error?: string }
-        return { ok: r.ok, data: j.data, error: j.error }
+      setEtapas(montarEtapas(workers.length))
+
+      const chamarFase = async (id: string, corpo: Record<string, unknown>) => {
+        atualizarEtapa(id, { status: 'rodando' })
+        try {
+          const r = await fetch(`/api/reports/${investigation.id}/fase`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(corpo),
+          })
+          const j = await r.json().catch(() => ({})) as {
+            data?: Record<string, unknown>; diagnostico?: Diagnostico; error?: string
+          }
+          atualizarEtapa(id, {
+            status: r.ok ? 'ok' : 'falhou',
+            diagnostico: j.diagnostico,
+            erro: r.ok ? undefined : (j.error ?? `Falhou (HTTP ${r.status})`),
+          })
+          return { ok: r.ok, data: j.data, error: j.error }
+        } catch (e) {
+          const msg = e instanceof Error && e.name === 'TypeError'
+            ? 'A etapa demorou mais que o limite do servidor e foi interrompida.'
+            : 'Erro de conexão nesta etapa.'
+          atualizarEtapa(id, { status: 'falhou', erro: msg })
+          return { ok: false, data: undefined, error: msg }
+        }
       }
 
       // ── Análise: causa raiz, confiança e Ishikawa ──
       setEtapa('Analisando as conversas…')
-      const analise = await chamarFase({ fase: 'analise' })
+      const analise = await chamarFase('analise', { fase: 'analise' })
       if (!analise.ok) {
         setErroInicio(
           `${analise.error ?? 'Falha na análise.'} A coleta está encerrada — clique novamente para tentar de novo.`
@@ -480,19 +521,26 @@ export function InvestigationDetail(props: Props) {
         ? (analise.data!.aliases as string[])
         : workers.map(w => w.alias)
 
+      // Remonta as etapas com o número real de lotes, agora que sabemos
+      setEtapas(prev => {
+        const novas = montarEtapas(aliases.length)
+        const feita = prev.find(e => e.id === 'analise')
+        return novas.map(e => (e.id === 'analise' && feita ? feita : e))
+      })
+
       const TAM_LOTE = 2
       let fontesOk = true
       for (let i = 0; i < aliases.length; i += TAM_LOTE) {
         const lote = aliases.slice(i, i + TAM_LOTE)
         const n = Math.min(i + lote.length, aliases.length)
         setEtapa(`Resumindo as fontes… (${n}/${aliases.length})`)
-        const r = await chamarFase({ fase: 'fontes', aliases: lote })
+        const r = await chamarFase(`fontes-${Math.floor(i / TAM_LOTE)}`, { fase: 'fontes', aliases: lote })
         if (!r.ok) { fontesOk = false; break }
       }
 
       // ── Recomendações: fecha a investigação como concluída ──
       setEtapa('Redigindo as recomendações…')
-      const recs = await chamarFase({ fase: 'recomendacoes' })
+      const recs = await chamarFase('recomendacoes', { fase: 'recomendacoes' })
       if (!recs.ok) {
         setErroInicio(
           `${recs.error ?? 'Falha ao redigir as recomendações.'} A análise e as fontes já foram salvas — clique novamente para concluir.`
@@ -502,13 +550,26 @@ export function InvestigationDetail(props: Props) {
       }
 
       // ── Complementares: se falharem, o relatório continua válido ──
-      const rodar = async (url: string, rotulo: string): Promise<boolean> => {
+      const rodar = async (id: string, url: string, rotulo: string): Promise<boolean> => {
         setEtapa(rotulo)
-        try { return (await fetch(url, { method: 'POST' })).ok } catch { return false }
+        atualizarEtapa(id, { status: 'rodando' })
+        try {
+          const r = await fetch(url, { method: 'POST' })
+          const j = await r.json().catch(() => ({})) as { diagnostico?: Diagnostico; error?: string }
+          atualizarEtapa(id, {
+            status: r.ok ? 'ok' : 'falhou',
+            diagnostico: j.diagnostico,
+            erro: r.ok ? undefined : (j.error ?? `Falhou (HTTP ${r.status})`),
+          })
+          return r.ok
+        } catch {
+          atualizarEtapa(id, { status: 'falhou', erro: 'A etapa foi interrompida pelo limite de tempo.' })
+          return false
+        }
       }
 
-      const planoOk = await rodar(`/api/reports/${investigation.id}/plano`, 'Montando o plano de ação…')
-      const evidOk  = await rodar(`/api/reports/${investigation.id}/evidencias`, 'Mapeando as evidências…')
+      const planoOk = await rodar('plano', `/api/reports/${investigation.id}/plano`, 'Montando o plano de ação…')
+      const evidOk  = await rodar('evidencias', `/api/reports/${investigation.id}/evidencias`, 'Mapeando as evidências…')
 
       const faltaram = [
         !fontesOk ? 'resumo de algumas fontes' : null,
@@ -533,8 +594,9 @@ export function InvestigationDetail(props: Props) {
       await refreshData()
     } finally {
       setEncerrando(false)
-      setConfirmarEncerramento(false)
       setEtapa('')
+      // O modal não fecha sozinho: o painel de etapas é a prova de que tudo foi
+      // enviado e recebido, e o gestor precisa poder conferir antes de sair
     }
   }
 
@@ -628,8 +690,10 @@ export function InvestigationDetail(props: Props) {
         const aindaRespondendo = workers.filter(w => w.status === 'active' || w.status === 'pending')
         return (
           <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-sm shadow-xl border border-slate-200 w-full max-w-md p-6 space-y-4">
-              <h2 className="text-base font-semibold text-slate-900">Encerrar e gerar relatório?</h2>
+            <div className="bg-white rounded-sm shadow-xl border border-slate-200 w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+              <h2 className="text-base font-semibold text-slate-900">
+                {encerrando ? 'Gerando relatório' : 'Encerrar e gerar relatório?'}
+              </h2>
 
               <div className="text-sm text-slate-600 leading-relaxed space-y-2">
                 <p>
@@ -646,30 +710,39 @@ export function InvestigationDetail(props: Props) {
                   </div>
                 )}
                 <p className="text-xs text-slate-500">
-                  A geração leva cerca de um minuto e acontece em três etapas: análise, plano de
-                  ação e mapa de evidências. Se o relatório não ficar bom, você pode gerá-lo de
-                  novo depois — as conversas ficam guardadas.
+                  A geração acontece em etapas — análise, resumo das fontes, recomendações, plano
+                  de ação e mapa de evidências — porque o conjunto não cabe numa única execução.
+                  Nenhuma conversa é encurtada para caber: o que se divide é o trabalho. Você
+                  acompanha cada etapa abaixo e pode conferir que tudo chegou à IA.
                 </p>
-                {encerrando && etapa && (
-                  <p className="text-xs font-semibold text-teal-700">{etapa}</p>
-                )}
+                {etapas.length > 0 && <ProgressoGeracao etapas={etapas} />}
               </div>
 
               <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => setConfirmarEncerramento(false)}
-                  disabled={encerrando}
-                  className="text-xs font-semibold uppercase tracking-wider border border-slate-200 text-slate-600 px-4 py-2 rounded-sm hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Voltar
-                </button>
-                <button
-                  onClick={encerrarEGerar}
-                  disabled={encerrando}
-                  className="text-xs font-semibold uppercase tracking-wider bg-slate-900 text-white px-4 py-2 rounded-sm hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {encerrando ? 'Gerando…' : 'Encerrar e gerar'}
-                </button>
+                {(() => {
+                  const terminou = etapas.length > 0 && !encerrando
+                  const houveFalha = etapas.some(e => e.status === 'falhou')
+                  return (
+                    <>
+                      <button
+                        onClick={() => { setConfirmarEncerramento(false); setEtapas([]) }}
+                        disabled={encerrando}
+                        className="text-xs font-semibold uppercase tracking-wider border border-slate-200 text-slate-600 px-4 py-2 rounded-sm hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {terminou ? 'Fechar' : 'Voltar'}
+                      </button>
+                      {(!terminou || houveFalha) && (
+                        <button
+                          onClick={encerrarEGerar}
+                          disabled={encerrando}
+                          className="text-xs font-semibold uppercase tracking-wider bg-slate-900 text-white px-4 py-2 rounded-sm hover:bg-slate-800 disabled:opacity-50"
+                        >
+                          {encerrando ? 'Gerando…' : houveFalha ? 'Tentar etapas que faltaram' : 'Encerrar e gerar'}
+                        </button>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
             </div>
           </div>

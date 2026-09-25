@@ -67,7 +67,7 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
 
     const { allMessages, workerAliases } = await montarEntradaRelatorio(investigationId)
 
-    const itens = await generateActionPlan({
+    const { itens, telemetria } = await generateActionPlan({
       investigation: { title: investigation.title, problem_description: investigation.problem_description },
       rootCause: relatorio.root_cause,
       recommendations: parseJson<string[]>(relatorio.recommendations, []),
@@ -104,7 +104,10 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
       )
     }
 
-    return Response.json({ data: { acoes: itens.length } })
+    return Response.json({
+      data: { acoes: itens.length },
+      diagnostico: { ...telemetria, itens: itens.length },
+    })
   } catch (error) {
     if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     await logError('api/reports/plano', error)

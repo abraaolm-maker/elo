@@ -4,6 +4,7 @@ import { ACTION_PLAN_SYSTEM_PROMPT } from './prompts'
 import { parseAIJson } from './utils'
 import { logUsage } from './cost-tracker'
 import type { ReportMessageEntry, WorkerAlias, ActionPlanItemOutput } from './types'
+import type { Telemetria } from './report-phases'
 
 export interface ActionPlanInput {
   investigation: { title: string; problem_description: string }
@@ -54,18 +55,27 @@ function validar(raw: unknown): ActionPlanItemOutput[] {
 }
 
 /** Gera o plano de ação a partir da causa raiz já apurada. */
-export async function generateActionPlan(input: ActionPlanInput): Promise<ActionPlanItemOutput[]> {
+export async function generateActionPlan(
+  input: ActionPlanInput
+): Promise<{ itens: ActionPlanItemOutput[]; telemetria: Telemetria }> {
   const client = new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') })
+  const corpo = JSON.stringify(input)
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 3000,
+    max_tokens: 4000,
     system: ACTION_PLAN_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: JSON.stringify(input) }],
+    messages: [{ role: 'user', content: corpo }],
   })
 
   const bloco = response.content[0]
   if (bloco?.type !== 'text') throw new Error('Tipo de resposta inesperado')
+
+  // Resposta cortada pelo limite = JSON incompleto. Falhar é melhor que gravar
+  // um plano pela metade sem ninguém perceber.
+  if (response.stop_reason === 'max_tokens') {
+    throw new Error('A resposta da IA foi cortada pelo limite de tokens. Nada foi gravado — refaça esta etapa.')
+  }
 
   const itens = validar(parseAIJson<unknown>(bloco.text))
 
@@ -81,5 +91,14 @@ export async function generateActionPlan(input: ActionPlanInput): Promise<Action
     }).catch(() => {})
   }
 
-  return itens
+  return {
+    itens,
+    telemetria: {
+      mensagens_enviadas: input.allMessages.length,
+      caracteres_enviados: corpo.length,
+      tokens_entrada: response.usage?.input_tokens ?? 0,
+      tokens_saida: response.usage?.output_tokens ?? 0,
+      truncada: false,
+    },
+  }
 }

@@ -81,11 +81,11 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
       problem_description: investigation.problem_description,
     }
 
-    const { allMessages, workerAliases } = await montarEntradaRelatorio(investigationId)
+    const { allMessages, workerAliases, descartadasSemConteudo } = await montarEntradaRelatorio(investigationId)
 
     // ── Fase: análise ────────────────────────────────────────────────────────
     if (fase === 'analise') {
-      const saida = await gerarAnalise(
+      const { saida, telemetria } = await gerarAnalise(
         { investigation: dadosInvestigacao, allMessages, workerAliases },
         ctx
       )
@@ -132,6 +132,14 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
           // O cliente usa isto para saber quantos lotes de fontes rodar
           aliases: workerAliases.map(w => w.alias),
         },
+        diagnostico: {
+          ...telemetria,
+          // Total no banco vs. o que chegou à IA — se houver diferença, a tela
+          // mostra quantas mensagens ficaram de fora e por quê
+          mensagens_no_banco: allMessages.length + descartadasSemConteudo,
+          descartadas_sem_conteudo: descartadasSemConteudo,
+          participantes: workerAliases.length,
+        },
       })
     }
 
@@ -158,7 +166,7 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
       const fontesDoLote: WorkerAlias[] = workerAliases.filter(w => pedidos.includes(w.alias))
       const msgsDoLote = allMessages.filter(m => pedidos.includes(m.alias))
 
-      const novas = await gerarFontes(
+      const { fontes: novas, telemetria } = await gerarFontes(
         {
           investigation: dadosInvestigacao,
           rootCause: relatorio.root_cause,
@@ -177,11 +185,18 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
         .set({ sources_summary: JSON.stringify(total) })
         .where(eq(schema.reports.investigation_id, investigationId))
 
-      return Response.json({ data: { fontes_no_lote: novas.length, total: total.length } })
+      return Response.json({
+        data: { fontes_no_lote: novas.length, total: total.length },
+        diagnostico: {
+          ...telemetria,
+          lote: pedidos,
+          pontos_extraidos: novas.reduce((acc, f) => acc + f.key_points.length, 0),
+        },
+      })
     }
 
     // ── Fase: recomendações ──────────────────────────────────────────────────
-    const recs = await gerarRecomendacoes(
+    const { recomendacoes: recs, telemetria } = await gerarRecomendacoes(
       {
         investigation: dadosInvestigacao,
         rootCause: relatorio.root_cause,
@@ -203,7 +218,10 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
         .where(eq(schema.investigations.id, investigationId))
     }
 
-    return Response.json({ data: { recomendacoes: recs.length } })
+    return Response.json({
+      data: { recomendacoes: recs.length },
+      diagnostico: { ...telemetria, itens: recs.length },
+    })
   } catch (error) {
     if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
     await logError('api/reports/fase', error)

@@ -28,21 +28,46 @@ interface Contexto {
   investigationId?: string
 }
 
+/**
+ * Telemetria de uma chamada — permite ao gestor conferir, na tela, que a IA
+ * recebeu o volume esperado de conversa e devolveu resposta completa.
+ */
+export interface Telemetria {
+  mensagens_enviadas: number
+  caracteres_enviados: number
+  tokens_entrada: number
+  tokens_saida: number
+  /** true quando a resposta foi cortada pelo limite de tokens — indica perda */
+  truncada: boolean
+}
+
 async function chamar(
   system: string,
   payload: unknown,
   maxTokens: number,
-  ctx: Contexto
-): Promise<unknown> {
+  ctx: Contexto,
+  mensagens: number
+): Promise<{ parsed: unknown; telemetria: Telemetria }> {
+  const corpo = JSON.stringify(payload)
+
   const response = await CLIENT().messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: maxTokens,
     system,
-    messages: [{ role: 'user', content: JSON.stringify(payload) }],
+    messages: [{ role: 'user', content: corpo }],
   })
 
   const bloco = response.content[0]
   if (bloco?.type !== 'text') throw new Error('Tipo de resposta inesperado')
+
+  // stop_reason 'max_tokens' significa que o JSON foi cortado no meio. Falhar
+  // aqui é melhor do que gravar um relatório pela metade sem ninguém notar.
+  const truncada = response.stop_reason === 'max_tokens'
+  if (truncada) {
+    throw new Error(
+      'A resposta da IA foi cortada pelo limite de tokens. Nenhum dado foi gravado — esta etapa precisa ser refeita.'
+    )
+  }
 
   if (response.usage) {
     logUsage({
@@ -56,7 +81,16 @@ async function chamar(
     }).catch(() => {})
   }
 
-  return parseAIJson<unknown>(bloco.text)
+  return {
+    parsed: parseAIJson<unknown>(bloco.text),
+    telemetria: {
+      mensagens_enviadas: mensagens,
+      caracteres_enviados: corpo.length,
+      tokens_entrada: response.usage?.input_tokens ?? 0,
+      tokens_saida: response.usage?.output_tokens ?? 0,
+      truncada,
+    },
+  }
 }
 
 const REGRAS_COMUNS = `
@@ -114,8 +148,8 @@ const ISHIKAWA_KEYS = ['mao_de_obra', 'maquina', 'metodo', 'material', 'meio_amb
 export async function gerarAnalise(
   input: { investigation: { title: string; problem_description: string }; allMessages: ReportMessageEntry[]; workerAliases: WorkerAlias[] },
   ctx: Contexto
-): Promise<AnaliseOutput> {
-  const raw = await chamar(ANALISE_PROMPT, input, 2000, ctx)
+): Promise<{ saida: AnaliseOutput; telemetria: Telemetria }> {
+  const { parsed: raw, telemetria } = await chamar(ANALISE_PROMPT, input, 3000, ctx, input.allMessages.length)
   if (typeof raw !== 'object' || raw === null) throw new Error('Análise não é um objeto')
   const r = raw as Record<string, unknown>
 
@@ -132,12 +166,15 @@ export async function gerarAnalise(
   }
 
   return {
-    root_cause: r.root_cause,
-    confidence_score: typeof r.confidence_score === 'number'
-      ? Math.min(100, Math.max(0, Math.round(r.confidence_score)))
-      : 0,
-    confidence_justification: typeof r.confidence_justification === 'string' ? r.confidence_justification : '',
-    ishikawa_breakdown: ishikawa,
+    saida: {
+      root_cause: r.root_cause,
+      confidence_score: typeof r.confidence_score === 'number'
+        ? Math.min(100, Math.max(0, Math.round(r.confidence_score)))
+        : 0,
+      confidence_justification: typeof r.confidence_justification === 'string' ? r.confidence_justification : '',
+      ishikawa_breakdown: ishikawa,
+    },
+    telemetria,
   }
 }
 
@@ -169,13 +206,18 @@ export async function gerarFontes(
     allMessages: ReportMessageEntry[]
   },
   ctx: Contexto
-): Promise<SourceSummaryOutput[]> {
-  const raw = await chamar(FONTES_PROMPT, input, 3000, ctx)
+): Promise<{ fontes: SourceSummaryOutput[]; telemetria: Telemetria }> {
+  const { parsed: raw, telemetria } = await chamar(FONTES_PROMPT, input, 4000, ctx, input.allMessages.length)
   if (typeof raw !== 'object' || raw === null) throw new Error('Fontes não é um objeto')
   const r = raw as Record<string, unknown>
-  if (!Array.isArray(r.sources_summary)) return []
 
-  return (r.sources_summary as unknown[])
+  // Devolver lista vazia em silêncio faria um lote inteiro sumir do relatório
+  // sem ninguém notar. Falhar aqui força a repetição da etapa.
+  if (!Array.isArray(r.sources_summary)) {
+    throw new Error('A IA não devolveu o resumo das fontes neste lote.')
+  }
+
+  const fontes = (r.sources_summary as unknown[])
     .filter((s): s is Record<string, unknown> => typeof s === 'object' && s !== null)
     .map(s => ({
       alias: typeof s.alias === 'string' ? s.alias : '',
@@ -185,6 +227,16 @@ export async function gerarFontes(
         : [],
     }))
     .filter(s => s.alias.length > 0)
+
+  // Conferência de cobertura: toda fonte pedida precisa voltar. Sem isto, um
+  // participante poderia ficar de fora do relatório silenciosamente.
+  const pedidos = input.fontes.map(f => f.alias)
+  const faltando = pedidos.filter(a => !fontes.some(f => f.alias === a))
+  if (faltando.length > 0) {
+    throw new Error(`A IA não resumiu ${faltando.length} fonte(s) deste lote: ${faltando.join(', ')}.`)
+  }
+
+  return { fontes, telemetria }
 }
 
 // ─── Fase: recomendações ──────────────────────────────────────────────────────
@@ -211,11 +263,17 @@ export async function gerarRecomendacoes(
     sourcesSummary: SourceSummaryOutput[]
   },
   ctx: Contexto
-): Promise<string[]> {
-  const raw = await chamar(RECOMENDACOES_PROMPT, input, 1200, ctx)
+): Promise<{ recomendacoes: string[]; telemetria: Telemetria }> {
+  const { parsed: raw, telemetria } = await chamar(RECOMENDACOES_PROMPT, input, 2000, ctx, 0)
   if (typeof raw !== 'object' || raw === null) throw new Error('Recomendações não é um objeto')
   const r = raw as Record<string, unknown>
-  return Array.isArray(r.recommendations)
-    ? (r.recommendations as unknown[]).filter((x): x is string => typeof x === 'string')
-    : []
+
+  if (!Array.isArray(r.recommendations) || r.recommendations.length === 0) {
+    throw new Error('A IA não devolveu recomendações.')
+  }
+
+  return {
+    recomendacoes: (r.recommendations as unknown[]).filter((x): x is string => typeof x === 'string'),
+    telemetria,
+  }
 }
