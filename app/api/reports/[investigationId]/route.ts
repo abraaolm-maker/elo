@@ -148,6 +148,9 @@ export async function POST(
       ishikawa_breakdown: JSON.stringify(reportOutput.ishikawa_breakdown),
       sources_summary: JSON.stringify(reportOutput.sources_summary),
       recommendations: JSON.stringify(reportOutput.recommendations),
+      evidence_map: JSON.stringify(reportOutput.evidence_map ?? []),
+      divergences: JSON.stringify(reportOutput.divergences ?? []),
+      sensitive_observations: JSON.stringify(reportOutput.sensitive_observations ?? []),
       generated_at: new Date().toISOString(),
     }
 

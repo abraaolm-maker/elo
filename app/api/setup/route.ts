@@ -231,6 +231,27 @@ export async function GET(request: Request) {
   // Colunas em reports
   results.push(await runSafe(`ALTER TABLE reports ADD COLUMN confidence_justification TEXT`, 'reports.confidence_justification'))
 
+  // Campos exclusivos do relatório gerencial
+  results.push(await runSafe(`ALTER TABLE reports ADD COLUMN evidence_map TEXT`, 'reports.evidence_map'))
+  results.push(await runSafe(`ALTER TABLE reports ADD COLUMN divergences TEXT`, 'reports.divergences'))
+  results.push(await runSafe(`ALTER TABLE reports ADD COLUMN sensitive_observations TEXT`, 'reports.sensitive_observations'))
+
+  // Tabela da devolutiva aos colaboradores
+  results.push(await runSafe(`
+    CREATE TABLE IF NOT EXISTS worker_reports (
+      id                 TEXT PRIMARY KEY,
+      investigation_id   TEXT NOT NULL UNIQUE REFERENCES investigations(id),
+      titulo             TEXT NOT NULL,
+      resumo_do_problema TEXT NOT NULL,
+      o_que_encontramos  TEXT NOT NULL,
+      conclusao          TEXT NOT NULL,
+      o_que_vai_mudar    TEXT NOT NULL,
+      o_que_pedimos      TEXT NOT NULL,
+      mensagem_final     TEXT NOT NULL,
+      generated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `, 'tabela worker_reports'))
+
   // Coluna de hash do CPF (o CPF em texto plano vira legado)
   results.push(await runSafe(`ALTER TABLE workers ADD COLUMN cpf_hash TEXT`, 'workers.cpf_hash'))
 

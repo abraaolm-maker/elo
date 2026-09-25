@@ -97,6 +97,10 @@ export const reports = sqliteTable('reports', {
   ishikawa_breakdown:      text('ishikawa_breakdown'),  // JSON string
   sources_summary:         text('sources_summary'),     // JSON string
   recommendations:         text('recommendations'),     // JSON string (array)
+  // Exclusivos do relatório gerencial — não circulam para os participantes
+  evidence_map:            text('evidence_map'),         // JSON: {finding,supporting_sources,strength,note}[]
+  divergences:             text('divergences'),          // JSON: {topic,positions,reading}[]
+  sensitive_observations:  text('sensitive_observations'),// JSON: string[]
   generated_at:            text('generated_at').notNull().default(sql`(datetime('now'))`),
 })
 
@@ -152,6 +156,25 @@ export const api_usage_logs = sqliteTable('api_usage_logs', {
 })
 export type ApiUsageLog    = typeof api_usage_logs.$inferSelect
 export type NewApiUsageLog = typeof api_usage_logs.$inferInsert
+
+// ─── WORKER_REPORTS ───────────────────────────────────────────────────────────
+// Devolutiva entregue aos participantes. Tabela separada de `reports` porque o
+// conteúdo tem outra forma e outro público: aqui não existe atribuição por
+// fonte, nem divergências, nem observações sensíveis.
+export const worker_reports = sqliteTable('worker_reports', {
+  id:                 text('id').primaryKey(),
+  investigation_id:   text('investigation_id').notNull().unique().references(() => investigations.id),
+  titulo:             text('titulo').notNull(),
+  resumo_do_problema: text('resumo_do_problema').notNull(),
+  o_que_encontramos:  text('o_que_encontramos').notNull(),  // JSON: string[]
+  conclusao:          text('conclusao').notNull(),
+  o_que_vai_mudar:    text('o_que_vai_mudar').notNull(),     // JSON: {acao,prazo}[]
+  o_que_pedimos:      text('o_que_pedimos').notNull(),       // JSON: string[]
+  mensagem_final:     text('mensagem_final').notNull(),
+  generated_at:       text('generated_at').notNull().default(sql`(datetime('now'))`),
+})
+export type WorkerReport    = typeof worker_reports.$inferSelect
+export type NewWorkerReport = typeof worker_reports.$inferInsert
 
 // ─── RATE_LIMITS ──────────────────────────────────────────────────────────────
 // Controle de tentativas por chave (ex: "login:email@x.com", "cpf:<token>").

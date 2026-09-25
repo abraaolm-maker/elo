@@ -5,7 +5,10 @@ import { useToast } from '@/components/ui/toast'
 import { ReportPrintable } from './ReportPrintable'
 import { ExportPdfButton } from './ExportPdfButton'
 import { fmtDataHora } from '@/lib/utils/date'
-import type { IshikawaBreakdownOutput, SourceSummaryOutput, ActionPlanTimeframe } from '@/lib/ai/types'
+import type {
+  IshikawaBreakdownOutput, SourceSummaryOutput, ActionPlanTimeframe,
+  EvidenceItemOutput, DivergenceOutput,
+} from '@/lib/ai/types'
 
 export interface ActionItemData {
   id: string
@@ -27,6 +30,9 @@ export interface ActionItemData {
 export interface ReportData {
   id: string
   investigation_id: string
+  evidence_map?: EvidenceItemOutput[]
+  divergences?: DivergenceOutput[]
+  sensitive_observations?: string[]
   root_cause: string
   confidence_score: number
   confidence_justification: string | null
@@ -56,6 +62,13 @@ const ISHIKAWA_LABELS: Record<keyof IshikawaBreakdownOutput, string> = {
 const ISHIKAWA_KEYS = [
   'mao_de_obra', 'maquina', 'metodo', 'material', 'meio_ambiente', 'medicao',
 ] as const
+
+/** Força da evidência — orienta o quanto a liderança pode se apoiar em cada achado. */
+const FORCA_CFG: Record<string, { label: string; badge: string; border: string }> = {
+  corroborada: { label: 'Corroborada', badge: 'bg-emerald-100 text-emerald-700', border: 'border-emerald-200' },
+  fonte_unica: { label: 'Fonte única', badge: 'bg-amber-100 text-amber-700',     border: 'border-amber-200' },
+  divergente:  { label: 'Divergente',  badge: 'bg-red-100 text-red-700',         border: 'border-red-200' },
+}
 
 // ─── ConfidenceMeter ──────────────────────────────────────────────────────────
 function ConfidenceMeter({ score }: { score: number }) {
@@ -298,6 +311,102 @@ export function ReportView({ investigationTitle, report, problemDescription = ''
           )}
         </div>
       </section>
+
+      {/* 2.1 MAPA DE EVIDÊNCIAS — só no gerencial */}
+      {(report.evidence_map ?? []).length > 0 && (
+        <section>
+          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">
+            Mapa de evidências
+          </p>
+          <p className="text-xs text-slate-400 mb-3">
+            O que está confirmado por mais de uma fonte e o que ainda é relato isolado
+          </p>
+          <div className="space-y-2">
+            {(report.evidence_map ?? []).map((e, i) => {
+              const cfg = FORCA_CFG[e.strength] ?? FORCA_CFG.fonte_unica
+              return (
+                <div key={i} className={`border rounded-sm bg-white p-4 ${cfg.border}`}>
+                  <div className="flex items-start justify-between gap-3 mb-1.5">
+                    <p className="text-sm text-slate-800 leading-relaxed flex-1">{e.finding}</p>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-sm shrink-0 ${cfg.badge}`}>
+                      {cfg.label}
+                    </span>
+                  </div>
+                  {e.supporting_sources.length > 0 && (
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                      {e.supporting_sources.length === 1 ? 'Fonte' : 'Fontes'}: {e.supporting_sources.join(', ')}
+                    </p>
+                  )}
+                  {e.note && <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{e.note}</p>}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* 2.2 DIVERGÊNCIAS — só no gerencial */}
+      {(report.divergences ?? []).length > 0 && (
+        <section>
+          <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-1">
+            Divergências entre fontes
+          </p>
+          <p className="text-xs text-slate-400 mb-3">
+            Pontos em que as fontes discordam — geralmente indicam visibilidades diferentes, não contradição
+          </p>
+          <div className="space-y-3">
+            {(report.divergences ?? []).map((d, i) => (
+              <div key={i} className="border border-amber-200 bg-amber-50/40 rounded-sm p-4">
+                <p className="text-sm font-semibold text-slate-900 mb-2.5">{d.topic}</p>
+                <div className="space-y-2 mb-3">
+                  {d.positions.map((p, j) => (
+                    <div key={j} className="flex gap-3 text-xs">
+                      <span className="font-semibold text-slate-700 shrink-0 min-w-[110px]">
+                        {p.alias}
+                        <span className="block font-normal text-slate-400">{p.role}</span>
+                      </span>
+                      <span className="text-slate-600 leading-relaxed">{p.position}</span>
+                    </div>
+                  ))}
+                </div>
+                {d.reading && (
+                  <p className="text-xs text-amber-800 leading-relaxed border-t border-amber-200 pt-2.5">
+                    <strong>Leitura:</strong> {d.reading}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 2.3 OBSERVAÇÕES SENSÍVEIS — nunca compartilhar */}
+      {(report.sensitive_observations ?? []).length > 0 && (
+        <section>
+          <div className="border-2 border-red-200 bg-red-50/40 rounded-sm p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+              <p className="text-[10px] font-bold tracking-widest text-red-700 uppercase">
+                Observações sensíveis — não compartilhar
+              </p>
+            </div>
+            <p className="text-xs text-red-600/80 mb-3 leading-relaxed">
+              Contexto relevante para a decisão da liderança. Não aparece na devolutiva aos
+              participantes e não deve circular.
+            </p>
+            <ul className="space-y-2">
+              {(report.sensitive_observations ?? []).map((obs, i) => (
+                <li key={i} className="flex gap-2.5 text-sm text-slate-700">
+                  <span className="text-red-400 shrink-0 mt-0.5">•</span>
+                  <span className="leading-relaxed">{obs}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
 
       {/* 3. PLANO DE AÇÃO */}
       {(report.action_items ?? []).length > 0 && (

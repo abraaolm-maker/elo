@@ -5,7 +5,11 @@ import { eq, and } from 'drizzle-orm'
 import { notFound, redirect } from 'next/navigation'
 import { ReportView, type ReportData, type ActionItemData } from '@/components/reports/ReportView'
 import { GenerateReportButton } from './GenerateReportButton'
-import type { IshikawaBreakdownOutput, SourceSummaryOutput, ActionPlanTimeframe } from '@/lib/ai/types'
+import type {
+  IshikawaBreakdownOutput, SourceSummaryOutput, ActionPlanTimeframe,
+  EvidenceItemOutput, DivergenceOutput, WorkerReportOutput,
+} from '@/lib/ai/types'
+import { DevolutivaSection, type DevolutivaData } from '@/components/reports/DevolutivaSection'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -46,6 +50,28 @@ export default async function ReportPage({ params }: RouteParams) {
       .get(),
   ])
 
+  // A devolutiva pode não existir (tabela nova) — não pode derrubar a página
+  let devolutiva: DevolutivaData | null = null
+  try {
+    const row = await db
+      .select()
+      .from(schema.worker_reports)
+      .where(eq(schema.worker_reports.investigation_id, investigationId))
+      .get()
+    if (row) {
+      devolutiva = {
+        titulo:             row.titulo,
+        resumo_do_problema: row.resumo_do_problema,
+        o_que_encontramos:  parseJsonSafe<string[]>(row.o_que_encontramos) ?? [],
+        conclusao:          row.conclusao,
+        o_que_vai_mudar:    parseJsonSafe<{ acao: string; prazo: string }[]>(row.o_que_vai_mudar) ?? [],
+        o_que_pedimos:      parseJsonSafe<string[]>(row.o_que_pedimos) ?? [],
+        mensagem_final:     row.mensagem_final,
+        generated_at:       row.generated_at,
+      }
+    }
+  } catch { devolutiva = null }
+
   if (!investigation) notFound()
 
   const canGenerate = investigation.status === 'completed' || investigation.status === 'saturated'
@@ -79,6 +105,9 @@ export default async function ReportPage({ params }: RouteParams) {
     reportData = {
       id:                      report.id,
       investigation_id:        report.investigation_id,
+      evidence_map:            parseJsonSafe<EvidenceItemOutput[]>(report.evidence_map) ?? [],
+      divergences:             parseJsonSafe<DivergenceOutput[]>(report.divergences) ?? [],
+      sensitive_observations:  parseJsonSafe<string[]>(report.sensitive_observations) ?? [],
       root_cause:              report.root_cause,
       confidence_score:        report.confidence_score,
       confidence_justification: report.confidence_justification,
@@ -110,12 +139,15 @@ export default async function ReportPage({ params }: RouteParams) {
       {/* Content */}
       <div className="px-8 py-6">
         {reportData ? (
-          <ReportView
-            investigationTitle={investigation.title}
-            report={reportData}
-            problemDescription={investigation.problem_description}
-            companyName={company?.name ?? ''}
-          />
+          <div className="space-y-8 max-w-4xl">
+            <ReportView
+              investigationTitle={investigation.title}
+              report={reportData}
+              problemDescription={investigation.problem_description}
+              companyName={company?.name ?? ''}
+            />
+            <DevolutivaSection investigationId={investigationId} devolutivaInicial={devolutiva} />
+          </div>
         ) : canGenerate ? (
           <div className="space-y-4">
             <div className="border border-slate-200 rounded-sm bg-white p-6 max-w-md">

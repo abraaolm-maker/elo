@@ -19,7 +19,7 @@ export interface LogUsageParams {
   companyId:        string
   managerId?:       string
   investigationId?: string
-  operation:        'investigation_engine' | 'report_generator' | 'context_generator'
+  operation:        'investigation_engine' | 'report_generator' | 'worker_report_generator' | 'context_generator'
   model:            string
   inputTokens:      number
   outputTokens:     number

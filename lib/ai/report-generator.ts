@@ -3,7 +3,10 @@ import { env } from '@/lib/utils/env'
 import { REPORT_GENERATOR_SYSTEM_PROMPT } from './prompts'
 import { parseAIJson } from './utils'
 import { logUsage } from './cost-tracker'
-import type { ReportGeneratorInput, ReportGeneratorOutput, IshikawaBreakdownOutput, ActionPlanItemOutput } from './types'
+import type {
+  ReportGeneratorInput, ReportGeneratorOutput, IshikawaBreakdownOutput, ActionPlanItemOutput,
+  EvidenceItemOutput, EvidenceStrength, DivergenceOutput,
+} from './types'
 
 const ISHIKAWA_KEYS = [
   'mao_de_obra', 'maquina', 'metodo', 'material', 'meio_ambiente', 'medicao',
@@ -103,6 +106,48 @@ function validateOutput(raw: unknown): ReportGeneratorOutput {
     }
   }
 
+  // ── Campos exclusivos do gerencial ─────────────────────────────────────────
+  const FORCAS = ['corroborada', 'fonte_unica', 'divergente'] as const
+
+  const evidenceMap: EvidenceItemOutput[] = Array.isArray(r.evidence_map)
+    ? (r.evidence_map as unknown[])
+        .filter((e): e is Record<string, unknown> => typeof e === 'object' && e !== null)
+        .map(e => ({
+          finding: typeof e.finding === 'string' ? e.finding : '',
+          supporting_sources: Array.isArray(e.supporting_sources)
+            ? (e.supporting_sources as unknown[]).filter((s): s is string => typeof s === 'string')
+            : [],
+          strength: FORCAS.includes(e.strength as typeof FORCAS[number])
+            ? (e.strength as EvidenceStrength)
+            : 'fonte_unica',
+          note: typeof e.note === 'string' ? e.note : null,
+        }))
+        .filter(e => e.finding.length > 0)
+    : []
+
+  const divergences: DivergenceOutput[] = Array.isArray(r.divergences)
+    ? (r.divergences as unknown[])
+        .filter((d): d is Record<string, unknown> => typeof d === 'object' && d !== null)
+        .map(d => ({
+          topic: typeof d.topic === 'string' ? d.topic : '',
+          positions: Array.isArray(d.positions)
+            ? (d.positions as unknown[])
+                .filter((p): p is Record<string, unknown> => typeof p === 'object' && p !== null)
+                .map(p => ({
+                  alias: typeof p.alias === 'string' ? p.alias : '',
+                  role: typeof p.role === 'string' ? p.role : '',
+                  position: typeof p.position === 'string' ? p.position : '',
+                }))
+            : [],
+          reading: typeof d.reading === 'string' ? d.reading : '',
+        }))
+        .filter(d => d.topic.length > 0)
+    : []
+
+  const sensitiveObservations = Array.isArray(r.sensitive_observations)
+    ? (r.sensitive_observations as unknown[]).filter((s): s is string => typeof s === 'string')
+    : []
+
   return {
     root_cause: r.root_cause,
     confidence_score: r.confidence_score,
@@ -111,6 +156,9 @@ function validateOutput(raw: unknown): ReportGeneratorOutput {
     sources_summary: sources,
     recommendations: r.recommendations as string[],
     action_plan: actionPlan,
+    evidence_map: evidenceMap,
+    divergences,
+    sensitive_observations: sensitiveObservations,
   }
 }
 

@@ -105,6 +105,24 @@ export interface ActionPlanItemOutput {
   related_pattern_note: string | null
 }
 
+/** Força da evidência por achado — quanto a conclusão se sustenta. */
+export type EvidenceStrength = 'corroborada' | 'fonte_unica' | 'divergente'
+
+export interface EvidenceItemOutput {
+  finding: string
+  /** Aliases que sustentam este achado (nunca nomes reais) */
+  supporting_sources: string[]
+  strength: EvidenceStrength
+  note: string | null
+}
+
+export interface DivergenceOutput {
+  topic: string
+  /** Posições conflitantes, por alias + cargo */
+  positions: { alias: string; role: string; position: string }[]
+  reading: string
+}
+
 export interface ReportGeneratorOutput {
   root_cause: string
   confidence_score: number
@@ -113,4 +131,36 @@ export interface ReportGeneratorOutput {
   sources_summary: SourceSummaryOutput[]
   recommendations: string[]
   action_plan: ActionPlanItemOutput[]
+  // ─── Exclusivos do relatório gerencial ───────────────────────────────────
+  /** Mapa de evidências: o que sustenta cada achado e com que força */
+  evidence_map?: EvidenceItemOutput[]
+  /** Pontos em que as fontes discordam — some do relatório dos colaboradores */
+  divergences?: DivergenceOutput[]
+  /** Observações delicadas: atrito, resistência, questões de liderança */
+  sensitive_observations?: string[]
+}
+
+// ─── Devolutiva aos colaboradores ─────────────────────────────────────────────
+
+/**
+ * Versão do relatório destinada a quem participou.
+ *
+ * Difere do gerencial não por ser um resumo, mas por ter outra função: fechar o
+ * ciclo com quem falou. Por isso não traz atribuição — nem por alias, nem por
+ * cargo, nem por qualquer detalhe que permita deduzir a autoria.
+ */
+export interface WorkerReportOutput {
+  titulo: string
+  /** O problema investigado, em linguagem acessível */
+  resumo_do_problema: string
+  /** Achados agregados, sem nenhuma atribuição */
+  o_que_encontramos: string[]
+  /** Conclusão principal, redigida sem apontar culpados */
+  conclusao: string
+  /** O que a liderança vai fazer a respeito */
+  o_que_vai_mudar: { acao: string; prazo: string }[]
+  /** O que se espera do time daqui para frente */
+  o_que_pedimos: string[]
+  /** Encerramento agradecendo a participação */
+  mensagem_final: string
 }
