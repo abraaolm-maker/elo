@@ -168,7 +168,10 @@ async function callClaude(
 ): Promise<Anthropic.Message> {
   return client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 3000,
+    // 3000 truncava o JSON em investigações grandes: com 6 fontes, o
+    // sources_summary somado ao plano de ação e aos campos de evidência passa
+    // folgado disso — e um JSON cortado ao meio não parseia, perdendo tudo.
+    max_tokens: 8000,
     system: REPORT_GENERATOR_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: JSON.stringify(input) }],
   })

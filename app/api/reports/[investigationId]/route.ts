@@ -1,3 +1,9 @@
+// Geração de relatório é a operação mais longa do sistema: manda todas as
+// conversas da investigação para a IA. Sem isto a rota rodava com o padrão da
+// Vercel (10s) e era morta antes de terminar — sem nem chegar ao catch, o que
+// deixava a falha invisível nos logs.
+export const maxDuration = 60
+
 import { requireAuth, isUnauthorizedError } from '@/lib/auth/middleware'
 import { db, schema } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'

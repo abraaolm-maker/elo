@@ -227,13 +227,13 @@ O JSON de retorno deve ter exatamente esta estrutura:
 
 7. RECOMMENDATIONS — Forneça entre 3 e 5 recomendações no campo "recommendations" como texto curto e acionável.
 
-8. MAPA DE EVIDÊNCIAS — Este relatório é para a liderança decidir onde investir. Ela precisa saber o que está sólido e o que é hipótese. Em evidence_map, liste os achados relevantes e classifique cada um:
+8. MAPA DE EVIDÊNCIAS — Este relatório é para a liderança decidir onde investir. Ela precisa saber o que está sólido e o que é hipótese. Liste no máximo 8 achados em evidence_map — os mais decisivos, não todos. Classifique cada um:
    - "corroborada": duas ou mais fontes independentes apontaram o mesmo, sem terem se comunicado
    - "fonte_unica": apenas uma fonte relatou — pode ser verdade, mas ainda não foi confirmado
    - "divergente": há relatos conflitantes sobre o ponto
    Seja honesto na classificação. Marcar como corroborado algo que veio de uma fonte só leva a liderança a agir sobre terreno instável.
 
-9. DIVERGÊNCIAS SÃO INFORMAÇÃO, NÃO RUÍDO — Quando as fontes discordam, registre em divergences. Divergência costuma revelar que pessoas em posições diferentes enxergam partes diferentes do problema. Em "reading", explique quem tem mais visibilidade sobre aquele ponto específico e por quê. Não trate a discordância como alguém estar mentindo. Se não houver divergências reais, devolva lista vazia.
+9. DIVERGÊNCIAS SÃO INFORMAÇÃO, NÃO RUÍDO — Quando as fontes discordam, registre em divergences (no máximo 5, as mais relevantes). Divergência costuma revelar que pessoas em posições diferentes enxergam partes diferentes do problema. Em "reading", explique quem tem mais visibilidade sobre aquele ponto específico e por quê. Não trate a discordância como alguém estar mentindo. Se não houver divergências reais, devolva lista vazia.
 
 10. OBSERVAÇÕES SENSÍVEIS — Em sensitive_observations, registre o que a liderança precisa saber mas que não deve circular: sinais de atrito entre áreas, receio de retaliação, resistência a mudanças, críticas à própria gestão. Descreva o padrão observado, nunca a pessoa. Escreva "há relato de receio em sinalizar problemas à chefia", nunca "Colaborador B tem medo do supervisor". Se não houver nada desse tipo, devolva lista vazia.
 

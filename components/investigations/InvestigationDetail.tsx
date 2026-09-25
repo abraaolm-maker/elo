@@ -433,19 +433,24 @@ export function InvestigationDetail(props: Props) {
   async function encerrarEGerar() {
     setEncerrando(true)
     setErroInicio(null)
+
+    // Rastreia se a coleta chegou a ser encerrada, para a mensagem de erro
+    // afirmar o que de fato aconteceu em vez de especular
+    let coletaEncerrada = investigation.status === 'saturated'
+
     try {
       if (investigation.status === 'active') {
         const fim = await fetch(`/api/investigations/${investigation.id}/finalizar`, { method: 'POST' })
         const jf = await fim.json() as { error?: string }
         if (!fim.ok) { setErroInicio(jf.error ?? 'Não foi possível encerrar a coleta.'); return }
+        coletaEncerrada = true
       }
 
       const rel = await fetch(`/api/reports/${investigation.id}`, { method: 'POST' })
-      const jr = await rel.json() as { error?: string }
+      const jr = await rel.json().catch(() => ({})) as { error?: string }
       if (!rel.ok) {
         setErroInicio(
-          (jr.error ?? 'Falha ao gerar o relatório.') +
-          ' A coleta foi encerrada — você pode tentar gerar o relatório novamente.'
+          `${jr.error ?? 'Falha ao gerar o relatório.'} A coleta está encerrada — clique novamente para tentar gerar o relatório.`
         )
         await refreshData()
         return
@@ -454,7 +459,13 @@ export function InvestigationDetail(props: Props) {
       toast.success('Relatório gerado!')
       await refreshData()
     } catch {
-      setErroInicio('Erro de conexão. A coleta pode ter sido encerrada — atualize a página.')
+      // Cai aqui quando a função do servidor é interrompida antes de responder —
+      // tipicamente investigações grandes que estouram o tempo limite.
+      setErroInicio(
+        coletaEncerrada
+          ? 'A geração demorou mais do que o limite do servidor e foi interrompida. A coleta já está encerrada e nenhuma resposta se perdeu — clique em "Encerrar e gerar relatório" de novo para tentar outra vez.'
+          : 'Não foi possível concluir a operação. Atualize a página e tente novamente.'
+      )
       await refreshData()
     } finally {
       setEncerrando(false)
