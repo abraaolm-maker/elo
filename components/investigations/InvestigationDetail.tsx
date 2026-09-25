@@ -446,6 +446,7 @@ export function InvestigationDetail(props: Props) {
         coletaEncerrada = true
       }
 
+      // Fase 1 — relatório principal
       const rel = await fetch(`/api/reports/${investigation.id}`, { method: 'POST' })
       const jr = await rel.json().catch(() => ({})) as { error?: string }
       if (!rel.ok) {
@@ -456,7 +457,22 @@ export function InvestigationDetail(props: Props) {
         return
       }
 
-      toast.success('Relatório gerado!')
+      // Fase 2 — camada de evidências. Vai em requisição separada porque as
+      // duas juntas ultrapassam o tempo limite da função em investigações
+      // grandes. Se falhar, o relatório principal continua válido.
+      let evidenciasOk = true
+      try {
+        const ev = await fetch(`/api/reports/${investigation.id}/evidencias`, { method: 'POST' })
+        evidenciasOk = ev.ok
+      } catch {
+        evidenciasOk = false
+      }
+
+      if (evidenciasOk) {
+        toast.success('Relatório gerado!')
+      } else {
+        toast.info('Relatório gerado. O mapa de evidências falhou — abra o relatório e gere novamente.')
+      }
       await refreshData()
     } catch {
       // Cai aqui quando a função do servidor é interrompida antes de responder —

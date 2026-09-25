@@ -11,6 +11,8 @@ import { generateReport } from '@/lib/ai/report-generator'
 import type { ReportMessageEntry, WorkerAlias } from '@/lib/ai/types'
 import type { IshikawaBreakdownOutput } from '@/lib/ai/types'
 import { assignPriorityRanks } from '@/lib/ai/utils/prioritization'
+import { montarEntradaRelatorio } from '@/lib/ai/report-input'
+import { logError } from '@/lib/monitoring/logger'
 import crypto from 'crypto'
 
 function parseJsonField<T>(raw: string | null): T | null {
@@ -113,25 +115,9 @@ export async function POST(
       workerAliases.push({ alias: row.alias, role: row.role })
     }
 
-    // Buscar todas as mensagens
-    const msgRows = await db
-      .select()
-      .from(schema.messages)
-      .where(eq(schema.messages.investigation_id, investigationId))
-      .orderBy(schema.messages.created_at)
-
-    const allMessages: ReportMessageEntry[] = msgRows
-      .filter(m => m.content !== null)
-      .map(m => {
-        const workerInfo = aliasMap.get(m.worker_id)
-        return {
-          alias: workerInfo?.alias ?? 'Colaborador',
-          role: workerInfo?.role ?? '',
-          direction: m.direction as 'outbound' | 'inbound',
-          content: m.content as string,
-          key_points_extracted: parseJsonField<string[]>(m.key_points_extracted) ?? undefined,
-        }
-      })
+    // Payload enxuto e compartilhado com as demais fases — as perguntas da
+    // própria IA vão truncadas, já que a evidência está nas respostas
+    const { allMessages } = await montarEntradaRelatorio(investigationId)
 
     const reportOutput = await generateReport({
       investigation: { title: investigation.title, problem_description: investigation.problem_description },
@@ -154,9 +140,8 @@ export async function POST(
       ishikawa_breakdown: JSON.stringify(reportOutput.ishikawa_breakdown),
       sources_summary: JSON.stringify(reportOutput.sources_summary),
       recommendations: JSON.stringify(reportOutput.recommendations),
-      evidence_map: JSON.stringify(reportOutput.evidence_map ?? []),
-      divergences: JSON.stringify(reportOutput.divergences ?? []),
-      sensitive_observations: JSON.stringify(reportOutput.sensitive_observations ?? []),
+      // evidence_map, divergences e sensitive_observations são preenchidos pela
+      // segunda fase (POST .../evidencias) — não sobrescrever aqui
       generated_at: new Date().toISOString(),
     }
 
@@ -227,7 +212,9 @@ export async function POST(
     }, { status: 200 })
   } catch (error) {
     if (isUnauthorizedError(error)) return Response.json({ error: 'Não autenticado' }, { status: 401 })
-    console.error('[POST /api/reports/[investigationId]]', error)
-    return Response.json({ error: 'Erro interno' }, { status: 500 })
+    // Registrado no banco: sem isto, falhas nesta rota só existiam no console
+    // da Vercel e não apareciam no painel de Saúde do sistema
+    await logError('api/reports POST', error)
+    return Response.json({ error: 'Erro interno ao gerar o relatório.' }, { status: 500 })
   }
 }

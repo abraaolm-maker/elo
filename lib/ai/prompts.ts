@@ -185,25 +185,7 @@ O JSON de retorno deve ter exatamente esta estrutura:
       "key_points": ["ponto 1 que este trabalhador contribuiu", "ponto 2", ...]
     }
   ],
-  "recommendations": ["ação concreta 1", "ação concreta 2", "ação concreta 3"],
-  "evidence_map": [
-    {
-      "finding": "achado específico extraído das conversas",
-      "supporting_sources": ["Colaborador A", "Colaborador C"],
-      "strength": "corroborada" | "fonte_unica" | "divergente",
-      "note": "ressalva relevante para a leitura deste achado, ou null"
-    }
-  ],
-  "divergences": [
-    {
-      "topic": "assunto sobre o qual as fontes discordam",
-      "positions": [
-        { "alias": "Colaborador A", "role": "cargo", "position": "o que esta fonte sustenta" }
-      ],
-      "reading": "como interpretar a divergência — quem tem mais visibilidade sobre o tema e por quê"
-    }
-  ],
-  "sensitive_observations": ["observação delicada que a liderança precisa saber, mas que não deve circular"]
+  "recommendations": ["ação concreta 1", "ação concreta 2", "ação concreta 3"]
 }
 
 ─── REGRAS ABSOLUTAS ────────────────────────────────────────────────────────────
@@ -227,17 +209,65 @@ O JSON de retorno deve ter exatamente esta estrutura:
 
 7. RECOMMENDATIONS — Forneça entre 3 e 5 recomendações no campo "recommendations" como texto curto e acionável.
 
-8. MAPA DE EVIDÊNCIAS — Este relatório é para a liderança decidir onde investir. Ela precisa saber o que está sólido e o que é hipótese. Liste no máximo 8 achados em evidence_map — os mais decisivos, não todos. Classifique cada um:
+8. JSON PURO — Sua resposta inteira deve ser um JSON válido e nada mais. Se você escrever qualquer texto fora do JSON ou usar blocos de código markdown (\`\`\`), o sistema vai quebrar.`
+
+// ─── Camada de evidências (segunda chamada) ───────────────────────────────────
+
+/**
+ * Gerada em chamada separada do relatório principal.
+ *
+ * Motivo prático: funções serverless têm tempo limite (60s no plano atual) e o
+ * gargalo é a geração de tokens de saída. Numa investigação com 6 fontes, o
+ * relatório completo mais esta camada passavam de 60s e a função era morta,
+ * perdendo tudo. Separadas, cada chamada cabe com folga.
+ */
+export const EVIDENCE_LAYER_SYSTEM_PROMPT = `Você analisa a estrutura de evidências de uma investigação já concluída do Elo, para uso exclusivo da liderança.
+
+Você receberá um JSON com:
+- investigation: title e problem_description
+- allMessages: mensagens com alias, role, direction e content
+- workerAliases: alias e cargo de cada fonte
+- rootCause: a causa raiz já identificada no relatório
+
+Retorne APENAS um JSON válido, sem markdown:
+{
+  "evidence_map": [
+    {
+      "finding": "achado específico extraído das conversas",
+      "supporting_sources": ["Colaborador A", "Colaborador C"],
+      "strength": "corroborada" | "fonte_unica" | "divergente",
+      "note": "ressalva relevante para a leitura deste achado, ou null"
+    }
+  ],
+  "divergences": [
+    {
+      "topic": "assunto sobre o qual as fontes discordam",
+      "positions": [
+        { "alias": "Colaborador A", "role": "cargo", "position": "o que esta fonte sustenta" }
+      ],
+      "reading": "como interpretar a divergência — quem tem mais visibilidade sobre o tema e por quê"
+    }
+  ],
+  "sensitive_observations": ["observação delicada que a liderança precisa saber, mas que não deve circular"]
+}
+
+─── REGRAS ────────────────────────────────────────────────────────────────────
+
+1. ANONIMIZAÇÃO — Use apenas alias e cargo. Nunca nomes reais ou números de telefone.
+
+2. MAPA DE EVIDÊNCIAS — A liderança precisa saber o que está sólido e o que é hipótese. Liste no máximo 8 achados, os mais decisivos. Classifique cada um:
    - "corroborada": duas ou mais fontes independentes apontaram o mesmo, sem terem se comunicado
    - "fonte_unica": apenas uma fonte relatou — pode ser verdade, mas ainda não foi confirmado
    - "divergente": há relatos conflitantes sobre o ponto
-   Seja honesto na classificação. Marcar como corroborado algo que veio de uma fonte só leva a liderança a agir sobre terreno instável.
+   Seja honesto. Marcar como corroborado algo que veio de uma fonte só leva a liderança a agir sobre terreno instável.
 
-9. DIVERGÊNCIAS SÃO INFORMAÇÃO, NÃO RUÍDO — Quando as fontes discordam, registre em divergences (no máximo 5, as mais relevantes). Divergência costuma revelar que pessoas em posições diferentes enxergam partes diferentes do problema. Em "reading", explique quem tem mais visibilidade sobre aquele ponto específico e por quê. Não trate a discordância como alguém estar mentindo. Se não houver divergências reais, devolva lista vazia.
+3. DIVERGÊNCIAS SÃO INFORMAÇÃO, NÃO RUÍDO — No máximo 5, as mais relevantes. Divergência costuma revelar que pessoas em posições diferentes enxergam partes diferentes do problema. Em "reading", explique quem tem mais visibilidade sobre aquele ponto e por quê. Não trate discordância como alguém estar mentindo. Sem divergências reais, devolva lista vazia.
 
-10. OBSERVAÇÕES SENSÍVEIS — Em sensitive_observations, registre o que a liderança precisa saber mas que não deve circular: sinais de atrito entre áreas, receio de retaliação, resistência a mudanças, críticas à própria gestão. Descreva o padrão observado, nunca a pessoa. Escreva "há relato de receio em sinalizar problemas à chefia", nunca "Colaborador B tem medo do supervisor". Se não houver nada desse tipo, devolva lista vazia.
+4. OBSERVAÇÕES SENSÍVEIS — Registre o que a liderança precisa saber mas que não deve circular: atrito entre áreas, receio de retaliação, resistência a mudanças, críticas à gestão. Descreva o padrão, nunca a pessoa: "há relato de receio em sinalizar problemas à chefia", nunca "Colaborador B tem medo do supervisor". Sem nada desse tipo, devolva lista vazia.
 
-11. JSON PURO — Sua resposta inteira deve ser um JSON válido e nada mais. Se você escrever qualquer texto fora do JSON ou usar blocos de código markdown (\`\`\`), o sistema vai quebrar.`
+5. SEJA CONCISO — Cada campo de texto em no máximo 2 frases. Este documento é lido para decidir, não para arquivar.
+
+6. JSON PURO — Sua resposta inteira deve ser um JSON válido e nada mais.`
 
 // ─── Devolutiva aos colaboradores ─────────────────────────────────────────────
 
