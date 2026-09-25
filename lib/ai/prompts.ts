@@ -211,7 +211,67 @@ O JSON de retorno deve ter exatamente esta estrutura:
 
 8. JSON PURO — Sua resposta inteira deve ser um JSON válido e nada mais. Se você escrever qualquer texto fora do JSON ou usar blocos de código markdown (\`\`\`), o sistema vai quebrar.`
 
-// ─── Camada de evidências (segunda chamada) ───────────────────────────────────
+// ─── Plano de ação (segunda chamada) ──────────────────────────────────────────
+
+/**
+ * Gerado em chamada própria, separado do relatório principal.
+ *
+ * Além de caber no tempo limite da função, isto conserta um defeito antigo: o
+ * prompt do relatório nunca pediu `action_plan`, embora o parser, a tabela
+ * `action_items`, a interface e o PDF já esperassem esse campo. Na prática o
+ * plano de ação nunca era produzido.
+ */
+export const ACTION_PLAN_SYSTEM_PROMPT = `Você monta o plano de ação de uma investigação já concluída do Elo, a partir da causa raiz identificada.
+
+Você receberá um JSON com:
+- investigation: title e problem_description
+- rootCause: a causa raiz apurada
+- recommendations: recomendações já registradas no relatório
+- allMessages: as conversas, com alias, role, direction e content
+- workerAliases: alias e cargo de cada fonte
+
+Retorne APENAS um JSON válido, sem markdown:
+{
+  "action_plan": [
+    {
+      "what": "a ação, em uma frase clara e verificável",
+      "why": "o que esta ação corrige na causa raiz",
+      "where_scope": "onde se aplica (setor, etapa, local) ou null",
+      "who_role": "cargo responsável por executar, nunca nome de pessoa, ou null",
+      "how_to": "como executar, em passos concretos",
+      "how_much_estimate": "ordem de grandeza do custo ou esforço, ou null",
+      "impact_score": 0,
+      "effort_score": 0,
+      "is_recurring_pattern": false,
+      "related_pattern_note": "nota sobre a recorrência, ou null"
+    }
+  ]
+}
+
+─── REGRAS ────────────────────────────────────────────────────────────────────
+
+1. ENTRE 4 E 6 AÇÕES — Não mais que isso. Um plano com quinze itens não é executado; vira lista de intenções.
+
+2. ATACAR A CAUSA, NÃO O SINTOMA — Cada ação precisa remover ou reduzir a causa raiz. "Consertar os equipamentos que quebraram" trata sintoma. "Criar rotina de inspeção preventiva com checklist semanal" trata causa.
+
+3. VERIFICÁVEL — Alguém deve conseguir dizer, daqui a um mês, se a ação foi feita ou não. Evite "melhorar a comunicação" e "conscientizar a equipe". Prefira "definir, por escrito, quem comunica mudanças de escopo e em qual canal".
+
+4. IMPACTO E ESFORÇO, DE 0 A 100 — Seja realista e diferencie as ações; se tudo receber 80, a priorização perde sentido.
+   - impact_score: quanto essa ação reduz o problema
+   - effort_score: custo, tempo e complexidade de implantar
+   O prazo de execução é derivado automaticamente desses dois números — não invente campo de prazo.
+
+5. RESPONSÁVEL É CARGO — Em who_role use o cargo ("supervisor de manutenção"), nunca o alias nem nome de pessoa. Plano de ação circula na empresa; apontar indivíduo vira cobrança pessoal.
+
+6. SEM CULPA — Descreva a lacuna no processo, não a falha de quem executa. "Não existe conferência no recebimento" e não "o almoxarife não confere".
+
+7. PADRÃO RECORRENTE — Marque is_recurring_pattern como true apenas quando as conversas indicarem que o problema já aconteceu antes e voltou. Nesse caso explique em related_pattern_note por que as tentativas anteriores não seguraram.
+
+8. SEJA CONCISO — Cada campo em no máximo 2 frases.
+
+9. JSON PURO — Sua resposta inteira deve ser um JSON válido e nada mais.`
+
+// ─── Camada de evidências (terceira chamada) ──────────────────────────────────
 
 /**
  * Gerada em chamada separada do relatório principal.

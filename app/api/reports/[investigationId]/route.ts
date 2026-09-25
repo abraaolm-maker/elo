@@ -10,7 +10,6 @@ import { eq, and } from 'drizzle-orm'
 import { generateReport } from '@/lib/ai/report-generator'
 import type { ReportMessageEntry, WorkerAlias } from '@/lib/ai/types'
 import type { IshikawaBreakdownOutput } from '@/lib/ai/types'
-import { assignPriorityRanks } from '@/lib/ai/utils/prioritization'
 import { montarEntradaRelatorio } from '@/lib/ai/report-input'
 import { logError } from '@/lib/monitoring/logger'
 import crypto from 'crypto'
@@ -157,33 +156,9 @@ export async function POST(
       await db.insert(schema.reports).values({ id: reportId, ...reportValues })
     }
 
-    // ── Salvar action_items ────────────────────────────────────────────────────
-    // Deletar itens anteriores (no caso de regeneração)
-    await db
-      .delete(schema.action_items)
-      .where(eq(schema.action_items.report_id, reportId))
-
-    if (reportOutput.action_plan.length > 0) {
-      const rankedItems = assignPriorityRanks(reportOutput.action_plan)
-      await db.insert(schema.action_items).values(
-        rankedItems.map(item => ({
-          id:                   crypto.randomUUID(),
-          report_id:            reportId,
-          what:                 item.what,
-          why:                  item.why,
-          where_scope:          item.where_scope,
-          who_role:             item.who_role,
-          how_to:               item.how_to,
-          how_much_estimate:    item.how_much_estimate,
-          impact_score:         item.impact_score,
-          effort_score:         item.effort_score,
-          timeframe:            item.timeframe,
-          priority_rank:        item.priority_rank,
-          is_recurring_pattern: item.is_recurring_pattern,
-          related_pattern_note: item.related_pattern_note,
-        }))
-      )
-    }
+    // O plano de ação é gerado na fase seguinte (POST .../plano) — não mexer
+    // nos action_items aqui, para uma regeração da análise não apagar um plano
+    // que já esteja pronto
 
     // Com o relatório pronto, a investigação está concluída. Antes isso era
     // feito pelo fluxo automático; como a geração agora é disparada pelo

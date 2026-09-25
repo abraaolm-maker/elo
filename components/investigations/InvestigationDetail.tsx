@@ -383,6 +383,9 @@ export function InvestigationDetail(props: Props) {
   const [confirmarCancelamento, setConfirmarCancelamento] = useState(false)
   const [encerrando, setEncerrando] = useState(false)
   const [confirmarEncerramento, setConfirmarEncerramento] = useState(false)
+  // Qual fase da geração está rodando — sem isso o gestor encara um botão
+  // "gerando…" por mais de um minuto sem saber se travou
+  const [etapa, setEtapa] = useState('')
   const [erroInicio, setErroInicio] = useState<string | null>(null)
   const [editandoWorker, setEditandoWorker] = useState<WorkerParticipant | null>(null)
   const [adicionandoParticipante, setAdicionandoParticipante] = useState(false)
@@ -446,7 +449,12 @@ export function InvestigationDetail(props: Props) {
         coletaEncerrada = true
       }
 
-      // Fase 1 — relatório principal
+      // ── Fase 1: análise (causa raiz, Ishikawa, fontes, recomendações) ──
+      // As três fases vão em requisições separadas porque o tempo limite da
+      // função é 60s e o gargalo é a geração de tokens. Numa investigação com
+      // 6 participantes, tudo junto estourava o limite e a função morria
+      // levando junto o que já estava pronto.
+      setEtapa('Analisando as conversas…')
       const rel = await fetch(`/api/reports/${investigation.id}`, { method: 'POST' })
       const jr = await rel.json().catch(() => ({})) as { error?: string }
       if (!rel.ok) {
@@ -457,21 +465,30 @@ export function InvestigationDetail(props: Props) {
         return
       }
 
-      // Fase 2 — camada de evidências. Vai em requisição separada porque as
-      // duas juntas ultrapassam o tempo limite da função em investigações
-      // grandes. Se falhar, o relatório principal continua válido.
-      let evidenciasOk = true
-      try {
-        const ev = await fetch(`/api/reports/${investigation.id}/evidencias`, { method: 'POST' })
-        evidenciasOk = ev.ok
-      } catch {
-        evidenciasOk = false
+      // As fases seguintes são complementares: se falharem, o relatório
+      // principal continua válido e cada uma pode ser refeita sozinha
+      const rodarFase = async (url: string, rotulo: string): Promise<boolean> => {
+        setEtapa(rotulo)
+        try {
+          const r = await fetch(url, { method: 'POST' })
+          return r.ok
+        } catch {
+          return false
+        }
       }
 
-      if (evidenciasOk) {
+      const planoOk = await rodarFase(`/api/reports/${investigation.id}/plano`, 'Montando o plano de ação…')
+      const evidOk  = await rodarFase(`/api/reports/${investigation.id}/evidencias`, 'Mapeando as evidências…')
+
+      const faltaram = [
+        !planoOk ? 'plano de ação' : null,
+        !evidOk ? 'mapa de evidências' : null,
+      ].filter(Boolean)
+
+      if (faltaram.length === 0) {
         toast.success('Relatório gerado!')
       } else {
-        toast.info('Relatório gerado. O mapa de evidências falhou — abra o relatório e gere novamente.')
+        toast.info(`Relatório gerado, mas ${faltaram.join(' e ')} não saiu. Abra o relatório e gere novamente.`)
       }
       await refreshData()
     } catch {
@@ -486,6 +503,7 @@ export function InvestigationDetail(props: Props) {
     } finally {
       setEncerrando(false)
       setConfirmarEncerramento(false)
+      setEtapa('')
     }
   }
 
@@ -597,9 +615,13 @@ export function InvestigationDetail(props: Props) {
                   </div>
                 )}
                 <p className="text-xs text-slate-500">
-                  Se o relatório não ficar bom, você pode gerá-lo de novo depois — as conversas
-                  ficam guardadas.
+                  A geração leva cerca de um minuto e acontece em três etapas: análise, plano de
+                  ação e mapa de evidências. Se o relatório não ficar bom, você pode gerá-lo de
+                  novo depois — as conversas ficam guardadas.
                 </p>
+                {encerrando && etapa && (
+                  <p className="text-xs font-semibold text-teal-700">{etapa}</p>
+                )}
               </div>
 
               <div className="flex gap-2 justify-end">
@@ -692,7 +714,7 @@ export function InvestigationDetail(props: Props) {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Gerando relatório…
+                    {etapa || 'Gerando relatório…'}
                   </>
                 ) : 'Encerrar e gerar relatório'}
               </button>
