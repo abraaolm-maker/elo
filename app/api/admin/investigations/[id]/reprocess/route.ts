@@ -4,6 +4,7 @@ import { db, schema } from '@/lib/db'
 import { requireAdmin, isForbiddenError, forbiddenResponse, unauthorizedResponse, isUnauthorizedError } from '@/lib/auth/middleware'
 import { eq } from 'drizzle-orm'
 import { generateReport } from '@/lib/ai/report-generator'
+import { montarEntradaRelatorio } from '@/lib/ai/report-input'
 import crypto from 'crypto'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -28,26 +29,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const workerMap = new Map(iwRows.map(w => [w.worker_id, { alias: w.alias, role: w.role }]))
 
-    const rawMessages = await db
-      .select({ worker_id: schema.messages.worker_id, direction: schema.messages.direction, content: schema.messages.content, key_points_extracted: schema.messages.key_points_extracted })
-      .from(schema.messages)
-      .where(eq(schema.messages.investigation_id, investigationId))
-      .orderBy(schema.messages.created_at)
-      .all()
-
-    const allMessages = rawMessages
-      .filter(m => m.content !== null)
-      .map(m => {
-        const wInfo = workerMap.get(m.worker_id) ?? { alias: 'Desconhecido', role: '' }
-        return {
-          alias: wInfo.alias,
-          role: wInfo.role,
-          direction: m.direction as 'outbound' | 'inbound',
-          content: m.content!,
-          key_points_extracted: Array.isArray(m.key_points_extracted) ? (m.key_points_extracted as string[]) : undefined,
-        }
-      })
-
+    // Mesmo payload enxuto das demais rotas — o tamanho aqui é o que decide se
+    // a geração cabe no tempo limite da função
+    const { allMessages } = await montarEntradaRelatorio(investigationId)
     const workerAliases = Array.from(workerMap.values())
 
     const reportOutput = await generateReport({
