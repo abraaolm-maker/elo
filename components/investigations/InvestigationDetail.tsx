@@ -397,13 +397,14 @@ export function InvestigationDetail(props: Props) {
     setMessages(data.messages)
   }, [props.investigation.id])
 
-  // Acompanhamento ao vivo. Enquanto a investigação está em andamento, as
-  // respostas aparecem sozinhas na tela; 4s em 'active' porque é quando o
-  // trabalhador está de fato respondendo.
-  const emAndamento = investigation.status !== 'completed' && investigation.status !== 'cancelled'
+  // Acompanhamento ao vivo — só faz sentido enquanto a coleta está aberta.
+  // Em 'saturated' as rotas do trabalhador já recusam mensagens, então não há
+  // nada para chegar: seguir consultando seria gasto sem retorno, e o selo
+  // "ao vivo" prometeria movimento que não vai acontecer.
+  const coletaAberta = investigation.status === 'active'
   const live = useLiveRefresh(refreshData, {
-    enabled: emAndamento,
-    intervalMs: investigation.status === 'active' ? 4000 : 10000,
+    enabled: coletaAberta,
+    intervalMs: 4000,
   })
 
   async function iniciar() {
@@ -611,8 +612,10 @@ export function InvestigationDetail(props: Props) {
                 )}
                 {statusCfg.label}
               </div>
+              {/* Fora de 'active' o selo é omitido: o próprio badge de status
+                  já diz em que pé está, e repetir vira ruído */}
               <LiveIndicator
-                ativo={emAndamento}
+                ativo={coletaAberta}
                 ultimaAtualizacao={live.ultimaAtualizacao}
                 atualizando={live.atualizando}
                 comFalha={live.comFalha}

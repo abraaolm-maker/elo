@@ -35,14 +35,9 @@ export function LiveIndicator({ ativo, ultimaAtualizacao, atualizando, comFalha,
     return () => clearInterval(id)
   }, [ativo])
 
-  if (!ativo) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-        Encerrada
-      </span>
-    )
-  }
+  // Sem coleta aberta não há o que acompanhar, e o badge de status ao lado já
+  // informa a situação — exibir qualquer coisa aqui seria repetição.
+  if (!ativo) return null
 
   if (comFalha) {
     return (

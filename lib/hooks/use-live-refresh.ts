@@ -40,7 +40,10 @@ export function useLiveRefresh(
   fn: () => Promise<void>,
   { intervalMs, enabled }: LiveRefreshOptions
 ): LiveRefreshState {
-  const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null)
+  // Começa com o instante da montagem: os dados iniciais vieram da renderização
+  // no servidor, que acabou de acontecer. Iniciar em null faria a interface
+  // dizer "aguardando…" com informação recém-carregada na tela.
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(() => new Date())
   const [atualizando, setAtualizando] = useState(false)
   const [comFalha, setComFalha] = useState(false)
 
