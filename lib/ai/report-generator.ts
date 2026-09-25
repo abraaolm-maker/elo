@@ -168,10 +168,11 @@ async function callClaude(
 ): Promise<Anthropic.Message> {
   return client.messages.create({
     model: 'claude-sonnet-4-6',
-    // 3000 truncava o JSON em investigações grandes: com 6 fontes, o
-    // sources_summary somado ao plano de ação e aos campos de evidência passa
-    // folgado disso — e um JSON cortado ao meio não parseia, perdendo tudo.
-    max_tokens: 8000,
+    // Teto deliberado. Com 8000 o modelo preenchia o espaço disponível numa
+    // investigação de 6 fontes e a geração passava dos 60s de limite da
+    // função — falhando por completo. 4000 comporta a análise com folga e
+    // força concisão, que o prompt também exige na regra 8.
+    max_tokens: 4000,
     system: REPORT_GENERATOR_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: JSON.stringify(input) }],
   })

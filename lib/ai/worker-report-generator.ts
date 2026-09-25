@@ -136,7 +136,10 @@ export async function generateWorkerReport(input: WorkerReportInput): Promise<Wo
       return resultado
     } catch (err) {
       ultimoErro = err
-      const podeTentarDeNovo = tentativa < RETRY_DELAYS.length && (isRetryable(err) || err instanceof Error)
+      // Só repete o que tem chance de mudar de resultado: erro de rede ou
+      // sobrecarga. Repetir falha de parse consumiria o tempo limite três
+      // vezes para chegar ao mesmo erro.
+      const podeTentarDeNovo = tentativa < RETRY_DELAYS.length && isRetryable(err)
       if (!podeTentarDeNovo) break
       await sleep(RETRY_DELAYS[tentativa]!)
     }

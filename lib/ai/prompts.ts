@@ -209,7 +209,15 @@ O JSON de retorno deve ter exatamente esta estrutura:
 
 7. RECOMMENDATIONS — Forneça entre 3 e 5 recomendações no campo "recommendations" como texto curto e acionável.
 
-8. JSON PURO — Sua resposta inteira deve ser um JSON válido e nada mais. Se você escrever qualquer texto fora do JSON ou usar blocos de código markdown (\`\`\`), o sistema vai quebrar.`
+8. TAMANHO — Esta resposta precisa ser gerada dentro de um limite de tempo; texto longo demais faz a operação falhar e o gestor fica sem relatório nenhum. Respeite:
+   - root_cause: no máximo 4 frases
+   - confidence_justification: no máximo 3 frases
+   - cada categoria do ishikawa_breakdown: no máximo 2 frases
+   - key_points de cada fonte: no máximo 5 pontos, cada um em uma linha
+   - recommendations: entre 3 e 5, uma frase cada
+   Densidade vale mais que volume. Corte adjetivo, repetição e preâmbulo.
+
+9. JSON PURO — Sua resposta inteira deve ser um JSON válido e nada mais. Se você escrever qualquer texto fora do JSON ou usar blocos de código markdown (\`\`\`), o sistema vai quebrar.`
 
 // ─── Plano de ação (segunda chamada) ──────────────────────────────────────────
 
