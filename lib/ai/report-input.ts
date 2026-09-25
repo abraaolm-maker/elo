@@ -5,32 +5,26 @@ import type { ReportMessageEntry, WorkerAlias } from './types'
 /**
  * Montagem do payload enviado à IA para gerar relatório.
  *
- * Centralizado porque três rotas precisam exatamente do mesmo recorte, e
- * porque o tamanho deste payload é o que determina se a geração cabe no tempo
- * limite da função — regra que não pode divergir entre elas.
- *
- * As mensagens "outbound" são as perguntas feitas pela própria IA. Elas dão
- * contexto à resposta seguinte, mas não são evidência: o que o relatório
- * analisa é o que o trabalhador respondeu. Por isso são truncadas, enquanto as
- * respostas ("inbound") vão inteiras.
+ * Nada é truncado: o conteúdo integral das conversas é o insumo do relatório, e
+ * cortar entrada para caber no tempo limite significaria produzir um
+ * diagnóstico sobre evidência incompleta. O tempo é resolvido dividindo a
+ * geração em fases (ver lib/ai/report-phases.ts), não descartando dado.
  */
-
-const LIMITE_PERGUNTA = 160   // caracteres — o suficiente para saber o que foi perguntado
-const LIMITE_RESPOSTA = 2000  // corta só respostas realmente longas
 
 function parseJson<T>(raw: unknown): T | undefined {
   if (typeof raw !== 'string') return Array.isArray(raw) ? (raw as T) : undefined
   try { return JSON.parse(raw) as T } catch { return undefined }
 }
 
-function truncar(texto: string, limite: number): string {
-  return texto.length <= limite ? texto : texto.slice(0, limite) + '…'
-}
-
 export interface ReportInputData {
   allMessages: ReportMessageEntry[]
   workerAliases: WorkerAlias[]
   aliasMap: Map<string, { alias: string; role: string }>
+}
+
+/** Mensagens de um único worker — usado nas fases que processam fonte a fonte. */
+export function filtrarPorAlias(msgs: ReportMessageEntry[], alias: string): ReportMessageEntry[] {
+  return msgs.filter(m => m.alias === alias)
 }
 
 export async function montarEntradaRelatorio(investigationId: string): Promise<ReportInputData> {
@@ -66,12 +60,11 @@ export async function montarEntradaRelatorio(investigationId: string): Promise<R
     .filter(m => m.content !== null)
     .map(m => {
       const info = aliasMap.get(m.worker_id) ?? { alias: 'Colaborador', role: '' }
-      const ehPergunta = m.direction === 'outbound'
       return {
         alias: info.alias,
         role: info.role,
         direction: m.direction as 'outbound' | 'inbound',
-        content: truncar(m.content as string, ehPergunta ? LIMITE_PERGUNTA : LIMITE_RESPOSTA),
+        content: m.content as string,
         key_points_extracted: parseJson<string[]>(m.key_points_extracted),
       }
     })

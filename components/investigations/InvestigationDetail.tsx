@@ -449,38 +449,69 @@ export function InvestigationDetail(props: Props) {
         coletaEncerrada = true
       }
 
-      // ── Fase 1: análise (causa raiz, Ishikawa, fontes, recomendações) ──
-      // As três fases vão em requisições separadas porque o tempo limite da
-      // função é 60s e o gargalo é a geração de tokens. Numa investigação com
-      // 6 participantes, tudo junto estourava o limite e a função morria
-      // levando junto o que já estava pronto.
+      // O relatório é montado em etapas porque não cabe numa única execução da
+      // função (limite de 60s). Nenhuma conversa é encurtada para caber: o que
+      // se divide é o trabalho. Cada etapa grava o que produziu, então uma
+      // falha no meio não descarta o que já ficou pronto.
+      const chamarFase = async (corpo: Record<string, unknown>) => {
+        const r = await fetch(`/api/reports/${investigation.id}/fase`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(corpo),
+        })
+        const j = await r.json().catch(() => ({})) as { data?: Record<string, unknown>; error?: string }
+        return { ok: r.ok, data: j.data, error: j.error }
+      }
+
+      // ── Análise: causa raiz, confiança e Ishikawa ──
       setEtapa('Analisando as conversas…')
-      const rel = await fetch(`/api/reports/${investigation.id}`, { method: 'POST' })
-      const jr = await rel.json().catch(() => ({})) as { error?: string }
-      if (!rel.ok) {
+      const analise = await chamarFase({ fase: 'analise' })
+      if (!analise.ok) {
         setErroInicio(
-          `${jr.error ?? 'Falha ao gerar o relatório.'} A coleta está encerrada — clique novamente para tentar gerar o relatório.`
+          `${analise.error ?? 'Falha na análise.'} A coleta está encerrada — clique novamente para tentar de novo.`
         )
         await refreshData()
         return
       }
 
-      // As fases seguintes são complementares: se falharem, o relatório
-      // principal continua válido e cada uma pode ser refeita sozinha
-      const rodarFase = async (url: string, rotulo: string): Promise<boolean> => {
-        setEtapa(rotulo)
-        try {
-          const r = await fetch(url, { method: 'POST' })
-          return r.ok
-        } catch {
-          return false
-        }
+      // ── Fontes: em lotes, porque é a única parte que cresce com o número
+      //    de participantes ──
+      const aliases = Array.isArray(analise.data?.aliases)
+        ? (analise.data!.aliases as string[])
+        : workers.map(w => w.alias)
+
+      const TAM_LOTE = 2
+      let fontesOk = true
+      for (let i = 0; i < aliases.length; i += TAM_LOTE) {
+        const lote = aliases.slice(i, i + TAM_LOTE)
+        const n = Math.min(i + lote.length, aliases.length)
+        setEtapa(`Resumindo as fontes… (${n}/${aliases.length})`)
+        const r = await chamarFase({ fase: 'fontes', aliases: lote })
+        if (!r.ok) { fontesOk = false; break }
       }
 
-      const planoOk = await rodarFase(`/api/reports/${investigation.id}/plano`, 'Montando o plano de ação…')
-      const evidOk  = await rodarFase(`/api/reports/${investigation.id}/evidencias`, 'Mapeando as evidências…')
+      // ── Recomendações: fecha a investigação como concluída ──
+      setEtapa('Redigindo as recomendações…')
+      const recs = await chamarFase({ fase: 'recomendacoes' })
+      if (!recs.ok) {
+        setErroInicio(
+          `${recs.error ?? 'Falha ao redigir as recomendações.'} A análise e as fontes já foram salvas — clique novamente para concluir.`
+        )
+        await refreshData()
+        return
+      }
+
+      // ── Complementares: se falharem, o relatório continua válido ──
+      const rodar = async (url: string, rotulo: string): Promise<boolean> => {
+        setEtapa(rotulo)
+        try { return (await fetch(url, { method: 'POST' })).ok } catch { return false }
+      }
+
+      const planoOk = await rodar(`/api/reports/${investigation.id}/plano`, 'Montando o plano de ação…')
+      const evidOk  = await rodar(`/api/reports/${investigation.id}/evidencias`, 'Mapeando as evidências…')
 
       const faltaram = [
+        !fontesOk ? 'resumo de algumas fontes' : null,
         !planoOk ? 'plano de ação' : null,
         !evidOk ? 'mapa de evidências' : null,
       ].filter(Boolean)
@@ -488,7 +519,7 @@ export function InvestigationDetail(props: Props) {
       if (faltaram.length === 0) {
         toast.success('Relatório gerado!')
       } else {
-        toast.info(`Relatório gerado, mas ${faltaram.join(' e ')} não saiu. Abra o relatório e gere novamente.`)
+        toast.info(`Relatório gerado, mas ${faltaram.join(', ')} não saiu. Abra o relatório e gere novamente para completar.`)
       }
       await refreshData()
     } catch {
