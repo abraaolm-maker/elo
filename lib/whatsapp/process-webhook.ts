@@ -1,17 +1,17 @@
-import { db, schema } from '@/lib/db'
+﻿import { db, schema } from '@/lib/db'
 import { eq, and, ne, isNotNull } from 'drizzle-orm'
 import { parseWhatsAppPayload, resolveMetaMediaUrl } from './parser'
 import { sendWhatsAppMessage } from './sender'
 import { sendTelegramMessage } from '@/lib/telegram/sender'
 import { downloadAudio, uploadAudioToStorage, transcribeAudio } from '@/lib/audio/transcriber'
 import { runInvestigationEngine } from '@/lib/ai/investigation-engine'
-import { generateReport } from '@/lib/ai/report-generator'
+import { marcarSaturadaSeTodosTerminaram } from '@/lib/investigations/saturation'
 import type { MessageHistoryEntry, ReportMessageEntry, WorkerAlias, InvestigationContext } from '@/lib/ai/types'
 import crypto from 'crypto'
 import { canSpendOnAi } from '@/lib/billing/plan-limits'
 import { logWarn } from '@/lib/monitoring/logger'
 
-// ─── Lógica central — aceita payload bruto do Meta WhatsApp ──────────────────
+// â”€â”€â”€ LÃ³gica central â€” aceita payload bruto do Meta WhatsApp â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function processWebhookPayload(body: unknown): Promise<void> {
   const parsed = parseWhatsAppPayload(body)
@@ -21,8 +21,8 @@ export async function processWebhookPayload(body: unknown): Promise<void> {
   await processInboundMessage({ phoneNumber, messageId, type, content })
 }
 
-// ─── Lógica central — aceita parâmetros já extraídos ─────────────────────────
-// Usada tanto pelo webhook real quanto pela rota de simulação de dev.
+// â”€â”€â”€ LÃ³gica central â€” aceita parÃ¢metros jÃ¡ extraÃ­dos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Usada tanto pelo webhook real quanto pela rota de simulaÃ§Ã£o de dev.
 
 export async function processInboundMessage({
   phoneNumber,
@@ -35,7 +35,7 @@ export async function processInboundMessage({
   type: 'text' | 'audio'
   content: string
 }): Promise<void> {
-  // Deduplicação — raw_whatsapp_id tem constraint UNIQUE
+  // DeduplicaÃ§Ã£o â€” raw_whatsapp_id tem constraint UNIQUE
   const existing = await db
     .select({ id: schema.messages.id })
     .from(schema.messages)
@@ -69,7 +69,7 @@ export async function processInboundMessage({
     .get()
   if (!iw) return
 
-  // Confirmar que a investigação está ativa
+  // Confirmar que a investigaÃ§Ã£o estÃ¡ ativa
   const investigation = await db
     .select()
     .from(schema.investigations)
@@ -82,7 +82,7 @@ export async function processInboundMessage({
     .get()
   if (!investigation) return
 
-  // ── Processar mensagem ──────────────────────────────────────────────────────
+  // â”€â”€ Processar mensagem â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   let messageContent: string | null = null
   let audioUrl: string | null = null
@@ -90,7 +90,7 @@ export async function processInboundMessage({
   let savedMessageId: string | null = null
 
   if (type === 'audio') {
-    // Verificar retry count de falhas anteriores deste worker nesta investigação
+    // Verificar retry count de falhas anteriores deste worker nesta investigaÃ§Ã£o
     const lastFailed = await db
       .select({ retry_count: schema.messages.retry_count })
       .from(schema.messages)
@@ -107,8 +107,8 @@ export async function processInboundMessage({
     const currentRetryCount = lastFailed?.retry_count ?? 0
 
     try {
-      // Para Meta API: content é o Media ID — resolver para URL de download
-      // Para Telegram: content já é a URL direta (resolvida no webhook)
+      // Para Meta API: content Ã© o Media ID â€” resolver para URL de download
+      // Para Telegram: content jÃ¡ Ã© a URL direta (resolvida no webhook)
       const isTelegram = phoneNumber.startsWith('tg_')
       const audioDownloadUrl = isTelegram ? content : await resolveMetaMediaUrl(content)
       const accessToken = isTelegram ? undefined : process.env.WHATSAPP_ACCESS_TOKEN
@@ -136,7 +136,7 @@ export async function processInboundMessage({
           })
           savedMessageId = newMsgId
 
-          const retryText = 'Não consegui entender bem o áudio 🎙️\n\nPode repetir sua resposta? Tente falar um pouco mais devagar e em um local mais silencioso.\n\nSe preferir, pode responder por escrito também.'
+          const retryText = 'NÃ£o consegui entender bem o Ã¡udio ðŸŽ™ï¸\n\nPode repetir sua resposta? Tente falar um pouco mais devagar e em um local mais silencioso.\n\nSe preferir, pode responder por escrito tambÃ©m.'
           if (worker.whatsapp_number.startsWith('tg_')) {
             await sendTelegramMessage({ chatId: worker.whatsapp_number.replace('tg_', ''), text: retryText })
           } else {
@@ -180,7 +180,7 @@ export async function processInboundMessage({
 
   if (!messageContent) return
 
-  // ── Construir reportedFacts (key_points de outros workers) ──────────────────
+  // â”€â”€ Construir reportedFacts (key_points de outros workers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const otherMessages = await db
     .select({ key_points_extracted: schema.messages.key_points_extracted })
     .from(schema.messages)
@@ -198,7 +198,7 @@ export async function processInboundMessage({
       try { return (JSON.parse(m.key_points_extracted ?? '[]') as string[]) } catch { return [] }
     })
 
-  // ── Construir pendingValidations (hints de outros workers) ──────────────────
+  // â”€â”€ Construir pendingValidations (hints de outros workers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const otherIwRows = await db
     .select({ pending_hints: schema.investigation_workers.pending_hints })
     .from(schema.investigation_workers)
@@ -212,7 +212,7 @@ export async function processInboundMessage({
   const pendingValidations = otherIwRows
     .flatMap(w => { try { return JSON.parse(w.pending_hints ?? '[]') as string[] } catch { return [] } })
 
-  // ── Buscar histórico de mensagens deste worker ───────────────────────────────
+  // â”€â”€ Buscar histÃ³rico de mensagens deste worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const rawHistory = await db
     .select({ direction: schema.messages.direction, content: schema.messages.content })
     .from(schema.messages)
@@ -231,7 +231,7 @@ export async function processInboundMessage({
       content: m.content as string,
     }))
 
-  // ── Parsear investigation_context ────────────────────────────────────────────
+  // â”€â”€ Parsear investigation_context â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   let investigationContext: InvestigationContext | null = null
   if (investigation.investigation_context) {
     try { investigationContext = JSON.parse(investigation.investigation_context) as InvestigationContext } catch { /* usa null */ }
@@ -248,14 +248,14 @@ export async function processInboundMessage({
     .get()
   const maxQuestionsPerWorker = planCfgWh?.max_questions_per_worker ?? -1
 
-  // Teto de custo de IA — encerra o worker em vez de seguir gastando
+  // Teto de custo de IA â€” encerra o worker em vez de seguir gastando
   const orcamentoWh = await canSpendOnAi(investigation.company_id)
   if (!orcamentoWh.ok) {
     await db
       .update(schema.investigation_workers)
       .set({ status: 'saturated' })
       .where(eq(schema.investigation_workers.id, iw.id))
-    await logWarn('whatsapp/process-webhook', 'Teto de custo do plano atingido — worker encerrado', {
+    await logWarn('whatsapp/process-webhook', 'Teto de custo do plano atingido â€” worker encerrado', {
       companyId: investigation.company_id,
       investigationId: iw.investigation_id,
     })
@@ -297,7 +297,7 @@ export async function processInboundMessage({
       })
       .where(eq(schema.investigation_workers.id, iw.id))
 
-    // Salvar pergunta de saída no banco
+    // Salvar pergunta de saÃ­da no banco
     await db.insert(schema.messages).values({
       id: crypto.randomUUID(),
       investigation_id: iw.investigation_id,
@@ -309,7 +309,7 @@ export async function processInboundMessage({
       retry_count: 0,
     })
 
-    // Enviar pelo canal correto — falha aqui NÃO aborta o fluxo
+    // Enviar pelo canal correto â€” falha aqui NÃƒO aborta o fluxo
     const sendMessage = worker.whatsapp_number.startsWith('tg_')
       ? sendTelegramMessage({ chatId: worker.whatsapp_number.replace('tg_', ''), text: engineOutput.next_question })
       : sendWhatsAppMessage({ number: worker.whatsapp_number, text: engineOutput.next_question })
@@ -337,117 +337,8 @@ export async function processInboundMessage({
       })
       .where(eq(schema.investigation_workers.id, iw.id))
 
-    // Verificar se TODOS os workers desta investigação estão saturados ou unresponsive
-    const allIws = await db
-      .select({ status: schema.investigation_workers.status })
-      .from(schema.investigation_workers)
-      .where(eq(schema.investigation_workers.investigation_id, iw.investigation_id))
-
-    const allDone = allIws.every(
-      w => w.status === 'saturated' || w.status === 'unresponsive'
-    )
-
-    if (!allDone) return
-
-    // Atualizar investigação para 'saturated' antes de gerar relatório
-    await db
-      .update(schema.investigations)
-      .set({ status: 'saturated' })
-      .where(eq(schema.investigations.id, iw.investigation_id))
-
-    // ── Gerar relatório ──────────────────────────────────────────────────────
-
-    // Buscar todas as mensagens da investigação
-    const allMsgs = await db
-      .select()
-      .from(schema.messages)
-      .where(eq(schema.messages.investigation_id, iw.investigation_id))
-      .orderBy(schema.messages.created_at)
-
-    // Buscar workers da investigação com seus aliases
-    const allIwsWithWorkers = await db
-      .select({
-        worker_id: schema.investigation_workers.worker_id,
-        alias: schema.workers.anonymous_alias,
-        role: schema.workers.role,
-      })
-      .from(schema.investigation_workers)
-      .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
-      .where(eq(schema.investigation_workers.investigation_id, iw.investigation_id))
-
-    const workerMap = new Map<string, { alias: string; role: string }>()
-    for (const row of allIwsWithWorkers) {
-      workerMap.set(row.worker_id, { alias: row.alias, role: row.role })
-    }
-
-    const reportMessages: ReportMessageEntry[] = allMsgs
-      .filter(m => m.content !== null)
-      .map(m => {
-        const wInfo = workerMap.get(m.worker_id) ?? { alias: 'Desconhecido', role: '' }
-        let keyPoints: string[] | undefined
-        try {
-          keyPoints = m.key_points_extracted
-            ? (JSON.parse(m.key_points_extracted) as string[])
-            : undefined
-        } catch {
-          keyPoints = undefined
-        }
-        return {
-          alias: wInfo.alias,
-          role: wInfo.role,
-          direction: m.direction as 'outbound' | 'inbound',
-          content: m.content as string,
-          key_points_extracted: keyPoints,
-        }
-      })
-
-    const workerAliases: WorkerAlias[] = Array.from(workerMap.values())
-
-    try {
-      const report = await generateReport({
-        investigation: {
-          title: investigation.title,
-          problem_description: investigation.problem_description,
-        },
-        allMessages: reportMessages,
-        workerAliases,
-      })
-
-      // Upsert — pode já existir se regenerado manualmente
-      const existingReport = await db
-        .select({ id: schema.reports.id })
-        .from(schema.reports)
-        .where(eq(schema.reports.investigation_id, iw.investigation_id))
-        .get()
-
-      const reportValues = {
-        investigation_id: iw.investigation_id,
-        root_cause: report.root_cause,
-        confidence_score: report.confidence_score,
-        confidence_justification: report.confidence_justification ?? null,
-        ishikawa_breakdown: JSON.stringify(report.ishikawa_breakdown),
-        sources_summary: JSON.stringify(report.sources_summary),
-        recommendations: JSON.stringify(report.recommendations),
-        generated_at: new Date().toISOString(),
-      }
-
-      if (existingReport) {
-        await db
-          .update(schema.reports)
-          .set(reportValues)
-          .where(eq(schema.reports.investigation_id, iw.investigation_id))
-      } else {
-        await db.insert(schema.reports).values({ id: crypto.randomUUID(), ...reportValues })
-      }
-    } catch (error) {
-      console.error('[process-webhook] report generation error (non-fatal — regenerate via API)', error)
-    }
-
-    // Marcar como completed — independente do sucesso da geração do relatório
-    await db
-      .update(schema.investigations)
-      .set({ status: 'completed', completed_at: new Date().toISOString() })
-      .where(eq(schema.investigations.id, iw.investigation_id))
+    // Encerra a coleta quando todos terminaram. O relatório NÃO sai daqui —
+    // quem decide encerrar e gerar é o gestor, pelo botão no painel.
+    await marcarSaturadaSeTodosTerminaram(iw.investigation_id)
   }
 }
-

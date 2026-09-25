@@ -191,6 +191,17 @@ export async function POST(
       )
     }
 
+    // Com o relatório pronto, a investigação está concluída. Antes isso era
+    // feito pelo fluxo automático; como a geração agora é disparada pelo
+    // gestor, o encerramento precisa acontecer aqui — senão a investigação
+    // ficaria presa em 'saturated' mesmo já tendo relatório.
+    if (investigation.status !== 'completed') {
+      await db
+        .update(schema.investigations)
+        .set({ status: 'completed', completed_at: new Date().toISOString() })
+        .where(eq(schema.investigations.id, investigationId))
+    }
+
     const saved = await db
       .select()
       .from(schema.reports)

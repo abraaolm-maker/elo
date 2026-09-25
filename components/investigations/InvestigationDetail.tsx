@@ -208,12 +208,23 @@ function AddParticipantModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ worker_id: workerId }),
       })
+      const d = await res.json() as { error?: string; data?: { entrou_em_andamento?: boolean; pergunta_enviada?: boolean; coleta_reaberta?: boolean } }
       if (!res.ok) {
-        const d = await res.json() as { error?: string }
         toast.error(d.error ?? 'Erro ao adicionar.')
         return
       }
-      toast.success('Participante adicionado!')
+
+      // Quem entra numa investigação em andamento já recebe link e pergunta —
+      // vale avisar, porque o gestor precisa repassar o link a essa pessoa
+      if (d.data?.entrou_em_andamento) {
+        toast.success(
+          d.data.pergunta_enviada
+            ? 'Participante adicionado e já recebeu a primeira pergunta. Copie o link e envie para ele.'
+            : 'Participante adicionado. A primeira pergunta ainda não saiu — atualize em instantes.'
+        )
+      } else {
+        toast.success('Participante adicionado!')
+      }
       onAdded()
     } catch {
       toast.error('Erro de conexão.')
@@ -368,6 +379,8 @@ export function InvestigationDetail(props: Props) {
   const [iniciando, setIniciando] = useState(false)
   const [cancelando, setCancelando] = useState(false)
   const [confirmarCancelamento, setConfirmarCancelamento] = useState(false)
+  const [encerrando, setEncerrando] = useState(false)
+  const [confirmarEncerramento, setConfirmarEncerramento] = useState(false)
   const [erroInicio, setErroInicio] = useState<string | null>(null)
   const [editandoWorker, setEditandoWorker] = useState<WorkerParticipant | null>(null)
   const [adicionandoParticipante, setAdicionandoParticipante] = useState(false)
@@ -407,6 +420,45 @@ export function InvestigationDetail(props: Props) {
     }
   }
 
+  /**
+   * Encerra a coleta e gera o relatório.
+   *
+   * São duas chamadas porque as etapas são independentes de propósito: se a
+   * geração falhar, a coleta continua encerrada e o gestor pode reprocessar o
+   * relatório sem reabrir a investigação para novas respostas.
+   */
+  async function encerrarEGerar() {
+    setEncerrando(true)
+    setErroInicio(null)
+    try {
+      if (investigation.status === 'active') {
+        const fim = await fetch(`/api/investigations/${investigation.id}/finalizar`, { method: 'POST' })
+        const jf = await fim.json() as { error?: string }
+        if (!fim.ok) { setErroInicio(jf.error ?? 'Não foi possível encerrar a coleta.'); return }
+      }
+
+      const rel = await fetch(`/api/reports/${investigation.id}`, { method: 'POST' })
+      const jr = await rel.json() as { error?: string }
+      if (!rel.ok) {
+        setErroInicio(
+          (jr.error ?? 'Falha ao gerar o relatório.') +
+          ' A coleta foi encerrada — você pode tentar gerar o relatório novamente.'
+        )
+        await refreshData()
+        return
+      }
+
+      toast.success('Relatório gerado!')
+      await refreshData()
+    } catch {
+      setErroInicio('Erro de conexão. A coleta pode ter sido encerrada — atualize a página.')
+      await refreshData()
+    } finally {
+      setEncerrando(false)
+      setConfirmarEncerramento(false)
+    }
+  }
+
   async function cancelar() {
     setCancelando(true)
     try {
@@ -433,6 +485,10 @@ export function InvestigationDetail(props: Props) {
   const podeEditarObservacoes = investigation.status === 'active'
   const isPending = investigation.status === 'pending'
   const isConcluida = investigation.status === 'completed' || investigation.status === 'cancelled'
+  // Participantes podem entrar enquanto a investigação não estiver encerrada
+  const podeAdicionarParticipante = !isConcluida
+  // Encerrar a coleta e gerar o relatório é decisão do gestor
+  const podeEncerrar = investigation.status === 'active' || investigation.status === 'saturated'
 
   const msgsPorWorker = new Map<string, MessageItem[]>()
   for (const msg of messages) {
@@ -489,6 +545,54 @@ export function InvestigationDetail(props: Props) {
         </div>
       )}
 
+      {confirmarEncerramento && (() => {
+        const aindaRespondendo = workers.filter(w => w.status === 'active' || w.status === 'pending')
+        return (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-sm shadow-xl border border-slate-200 w-full max-w-md p-6 space-y-4">
+              <h2 className="text-base font-semibold text-slate-900">Encerrar e gerar relatório?</h2>
+
+              <div className="text-sm text-slate-600 leading-relaxed space-y-2">
+                <p>
+                  A coleta será encerrada e o relatório de causa raiz gerado com as respostas
+                  recebidas até agora.
+                </p>
+                {aindaRespondendo.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-sm px-3 py-2.5">
+                    <p className="text-amber-800 text-xs leading-relaxed">
+                      <strong>{aindaRespondendo.length} participante(s) ainda não concluíram.</strong>{' '}
+                      Ao encerrar agora, eles não conseguirão mais responder. O que já responderam
+                      entra no relatório.
+                    </p>
+                  </div>
+                )}
+                <p className="text-xs text-slate-500">
+                  Se o relatório não ficar bom, você pode gerá-lo de novo depois — as conversas
+                  ficam guardadas.
+                </p>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => setConfirmarEncerramento(false)}
+                  disabled={encerrando}
+                  className="text-xs font-semibold uppercase tracking-wider border border-slate-200 text-slate-600 px-4 py-2 rounded-sm hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Voltar
+                </button>
+                <button
+                  onClick={encerrarEGerar}
+                  disabled={encerrando}
+                  className="text-xs font-semibold uppercase tracking-wider bg-slate-900 text-white px-4 py-2 rounded-sm hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {encerrando ? 'Gerando…' : 'Encerrar e gerar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Header */}
       <div className="border-b border-slate-100 px-8 py-6 bg-white sticky top-0 z-10">
         <div className="flex items-start justify-between gap-4">
@@ -544,12 +648,29 @@ export function InvestigationDetail(props: Props) {
                 </button>
               </>
             )}
+            {podeEncerrar && (
+              <button
+                onClick={() => setConfirmarEncerramento(true)}
+                disabled={encerrando}
+                className="flex items-center gap-2 bg-slate-900 text-white text-xs font-semibold uppercase tracking-wider py-2.5 px-5 rounded-sm hover:bg-slate-800 transition-all shadow-sm disabled:opacity-50"
+              >
+                {encerrando ? (
+                  <>
+                    <svg className="animate-spin w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Gerando relatório…
+                  </>
+                ) : 'Encerrar e gerar relatório'}
+              </button>
+            )}
             {investigation.status === 'active' && (
               <button
                 onClick={() => setConfirmarCancelamento(true)}
                 className="text-xs font-semibold uppercase tracking-wider border border-red-200 text-red-600 bg-red-50 px-4 py-2.5 rounded-sm hover:bg-red-100 transition-colors"
               >
-                Encerrar
+                Cancelar investigação
               </button>
             )}
             {investigation.status === 'completed' && (
@@ -608,10 +729,11 @@ export function InvestigationDetail(props: Props) {
           <h2 className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">
             Participantes ({workers.length})
           </h2>
-          {isPending && (
+          {podeAdicionarParticipante && (
             <button
               onClick={() => setAdicionandoParticipante(true)}
               className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-teal-600 hover:text-teal-800 border border-teal-200 bg-teal-50 px-3 py-1.5 rounded-sm hover:bg-teal-100 transition-colors"
+              title={isPending ? undefined : 'O participante recebe o link e a primeira pergunta na hora'}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

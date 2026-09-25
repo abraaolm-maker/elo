@@ -1,4 +1,4 @@
-export const maxDuration = 60
+﻿export const maxDuration = 60
 
 import { db, schema } from '@/lib/db'
 import { eq, and, ne } from 'drizzle-orm'
@@ -8,10 +8,11 @@ import type { InvestigationContext } from '@/lib/ai/types'
 import { canSpendOnAi } from '@/lib/billing/plan-limits'
 import { logWarn } from '@/lib/monitoring/logger'
 import { verificarCpf } from '@/lib/security/cpf'
+import { marcarSaturadaSeTodosTerminaram } from '@/lib/investigations/saturation'
 
 interface RouteParams { params: Promise<{ token: string }> }
 
-// POST — worker envia mensagem de texto
+// POST â€” worker envia mensagem de texto
 export async function POST(req: Request, { params }: RouteParams): Promise<Response> {
   const { token } = await params
   const body = await req.json() as { cpf?: string; content?: string }
@@ -19,7 +20,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
   const cpf = typeof body.cpf === 'string' ? body.cpf.replace(/\D/g, '') : ''
   const content = typeof body.content === 'string' ? body.content.trim() : ''
 
-  if (!cpf || !content) return Response.json({ error: 'CPF e conteúdo obrigatórios.' }, { status: 400 })
+  if (!cpf || !content) return Response.json({ error: 'CPF e conteÃºdo obrigatÃ³rios.' }, { status: 400 })
 
   const iw = await db
     .select({
@@ -45,13 +46,13 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .where(eq(schema.investigation_workers.access_token, token))
     .get()
 
-  if (!iw) return Response.json({ error: 'Link inválido.' }, { status: 404 })
+  if (!iw) return Response.json({ error: 'Link invÃ¡lido.' }, { status: 404 })
   const cpfOk = await verificarCpf(cpf, { cpf: iw.worker_cpf, cpf_hash: iw.worker_cpf_hash })
   if (!cpfOk) {
-    return Response.json({ error: 'Sua sessão expirou. Recarregue a página e entre novamente com seu CPF.' }, { status: 401 })
+    return Response.json({ error: 'Sua sessÃ£o expirou. Recarregue a pÃ¡gina e entre novamente com seu CPF.' }, { status: 401 })
   }
-  if (iw.investigation_status !== 'active') return Response.json({ error: 'Investigação não está ativa.' }, { status: 400 })
-  if (iw.status === 'saturated') return Response.json({ error: 'Você já concluiu sua participação. Obrigado!' }, { status: 400 })
+  if (iw.investigation_status !== 'active') return Response.json({ error: 'InvestigaÃ§Ã£o nÃ£o estÃ¡ ativa.' }, { status: 400 })
+  if (iw.status === 'saturated') return Response.json({ error: 'VocÃª jÃ¡ concluiu sua participaÃ§Ã£o. Obrigado!' }, { status: 400 })
 
   // Salvar mensagem inbound do worker
   await db.insert(schema.messages).values({
@@ -65,7 +66,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     retry_count: 0,
   })
 
-  // Histórico deste worker
+  // HistÃ³rico deste worker
   const allMessages = await db
     .select({ direction: schema.messages.direction, content: schema.messages.content })
     .from(schema.messages)
@@ -76,7 +77,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .orderBy(schema.messages.created_at)
     .all()
 
-  // Cross-validation — fatos relatados por OUTROS workers (key_points das mensagens)
+  // Cross-validation â€” fatos relatados por OUTROS workers (key_points das mensagens)
   const otherMessages = await db
     .select({ key_points_extracted: schema.messages.key_points_extracted })
     .from(schema.messages)
@@ -90,7 +91,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
   const reportedFacts = otherMessages
     .flatMap(m => { try { return JSON.parse(m.key_points_extracted ?? '[]') as string[] } catch { return [] } })
 
-  // Cross-validation — validações pendentes geradas por OUTROS workers (pending_hints)
+  // Cross-validation â€” validaÃ§Ãµes pendentes geradas por OUTROS workers (pending_hints)
   const otherWorkers = await db
     .select({ pending_hints: schema.investigation_workers.pending_hints })
     .from(schema.investigation_workers)
@@ -118,8 +119,8 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     .get()
   const maxQuestionsPerWorker = planCfg?.max_questions_per_worker ?? -1
 
-  // Teto de custo de IA — verificado a cada chamada, não só na criação da
-  // investigação. Ao estourar, encerramos a participação deste worker como
+  // Teto de custo de IA â€” verificado a cada chamada, nÃ£o sÃ³ na criaÃ§Ã£o da
+  // investigaÃ§Ã£o. Ao estourar, encerramos a participaÃ§Ã£o deste worker como
   // saturada em vez de continuar gastando.
   const orcamento = await canSpendOnAi(iw.company_id)
   if (!orcamento.ok) {
@@ -128,7 +129,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       .set({ status: 'saturated' })
       .where(eq(schema.investigation_workers.id, iw.iw_id))
 
-    await logWarn('api/worker/messages', 'Teto de custo do plano atingido — worker encerrado', {
+    await logWarn('api/worker/messages', 'Teto de custo do plano atingido â€” worker encerrado', {
       companyId: iw.company_id,
       investigationId: iw.investigation_id,
     })
@@ -138,7 +139,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
         outbound_message: null,
         saturation_score: iw.saturation_score,
         status: 'saturated',
-        message: 'Obrigado pela sua participação! Suas respostas foram registradas.',
+        message: 'Obrigado pela sua participaÃ§Ã£o! Suas respostas foram registradas.',
       },
     })
   }
@@ -159,7 +160,7 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
     investigationId: iw.investigation_id,
   })
 
-  // Salvar key_points na última mensagem inbound
+  // Salvar key_points na Ãºltima mensagem inbound
   const lastInbound = await db
     .select({ id: schema.messages.id })
     .from(schema.messages)
@@ -196,9 +197,12 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
       .set({ status: 'saturated' })
       .where(eq(schema.investigation_workers.id, iw.iw_id))
 
-    outboundContent = 'Obrigado pela sua participação! Suas respostas foram registradas com sucesso. Você pode fechar esta página.'
+    outboundContent = 'Obrigado pela sua participaÃ§Ã£o! Suas respostas foram registradas com sucesso. VocÃª pode fechar esta pÃ¡gina.'
 
-    await checkAndGenerateReport(iw.investigation_id).catch(err => console.error('[worker-portal] report gen error', err))
+    // Encerra a coleta quando todos terminaram. O relatório NÃO sai daqui —
+    // quem decide encerrar e gerar é o gestor, pelo botão no painel.
+    await marcarSaturadaSeTodosTerminaram(iw.investigation_id)
+      .catch(err => logWarn('api/worker/messages', `Falha ao marcar saturada: ${String(err)}`, { investigationId: iw.investigation_id }))
   } else {
     outboundContent = engineOutput.next_question ?? null
   }
@@ -235,99 +239,3 @@ export async function POST(req: Request, { params }: RouteParams): Promise<Respo
   }, { status: 200 })
 }
 
-async function checkAndGenerateReport(investigationId: string) {
-  const workers = await db
-    .select({ status: schema.investigation_workers.status })
-    .from(schema.investigation_workers)
-    .where(eq(schema.investigation_workers.investigation_id, investigationId))
-    .all()
-
-  const allDone = workers.every(w => w.status === 'saturated' || w.status === 'unresponsive')
-  if (!allDone) return
-
-  await db.update(schema.investigations)
-    .set({ status: 'saturated' })
-    .where(eq(schema.investigations.id, investigationId))
-
-  const investigation = await db
-    .select({ title: schema.investigations.title, problem_description: schema.investigations.problem_description })
-    .from(schema.investigations)
-    .where(eq(schema.investigations.id, investigationId))
-    .get()
-
-  if (!investigation) return
-
-  const iwRows = await db
-    .select({
-      worker_id: schema.investigation_workers.worker_id,
-      alias: schema.workers.anonymous_alias,
-      role: schema.workers.role,
-    })
-    .from(schema.investigation_workers)
-    .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
-    .where(eq(schema.investigation_workers.investigation_id, investigationId))
-    .all()
-
-  const workerMap = new Map(iwRows.map(w => [w.worker_id, { alias: w.alias, role: w.role }]))
-
-  const rawMessages = await db
-    .select({
-      worker_id: schema.messages.worker_id,
-      direction: schema.messages.direction,
-      content: schema.messages.content,
-      key_points_extracted: schema.messages.key_points_extracted,
-    })
-    .from(schema.messages)
-    .where(eq(schema.messages.investigation_id, investigationId))
-    .orderBy(schema.messages.created_at)
-    .all()
-
-  const allMessages = rawMessages
-    .filter(m => m.content !== null)
-    .map(m => {
-      const wInfo = workerMap.get(m.worker_id) ?? { alias: 'Desconhecido', role: '' }
-      return {
-        alias: wInfo.alias,
-        role: wInfo.role,
-        direction: m.direction as 'outbound' | 'inbound',
-        content: m.content!,
-        key_points_extracted: Array.isArray(m.key_points_extracted) ? (m.key_points_extracted as string[]) : undefined,
-      }
-    })
-
-  const workerAliases = Array.from(workerMap.values())
-
-  try {
-    const { generateReport } = await import('@/lib/ai/report-generator')
-    const reportOutput = await generateReport({ investigation, allMessages, workerAliases })
-
-    const reportValues = {
-      investigation_id: investigationId,
-      root_cause: reportOutput.root_cause,
-      confidence_score: reportOutput.confidence_score,
-      confidence_justification: reportOutput.confidence_justification ?? null,
-      ishikawa_breakdown: JSON.stringify(reportOutput.ishikawa_breakdown),
-      sources_summary: JSON.stringify(reportOutput.sources_summary),
-      recommendations: JSON.stringify(reportOutput.recommendations),
-      generated_at: new Date().toISOString(),
-    }
-
-    const existingReport = await db
-      .select({ id: schema.reports.id })
-      .from(schema.reports)
-      .where(eq(schema.reports.investigation_id, investigationId))
-      .get()
-
-    if (existingReport) {
-      await db.update(schema.reports).set(reportValues).where(eq(schema.reports.investigation_id, investigationId))
-    } else {
-      await db.insert(schema.reports).values({ id: crypto.randomUUID(), ...reportValues })
-    }
-  } catch (err) {
-    console.error('[worker-portal] report gen error', err)
-  }
-
-  await db.update(schema.investigations)
-    .set({ status: 'completed', completed_at: new Date().toISOString() })
-    .where(eq(schema.investigations.id, investigationId))
-}
