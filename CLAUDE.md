@@ -761,13 +761,51 @@ POST /api/whatsapp/webhook recebido:
 14. Se action = 'mark_saturated':
     a. Salvar key_points_extracted na mensagem inbound
     b. Atualizar investigation_worker.status = 'saturated'
-    c. Verificar se TODOS os workers estão 'saturated' ou 'unresponsive'
-    d. Se sim:
-       → Atualizar investigation.status = 'saturated'
-       → Chamar generateReport()
-       → Salvar relatório na tabela reports
-       → Atualizar investigation.status = 'completed', completed_at = now()
+    c. Chamar marcarSaturadaSeTodosTerminaram() — se todos estiverem
+       'saturated' ou 'unresponsive', muda investigation.status = 'saturated'
+    d. PARAR AQUI. O relatório NÃO é gerado automaticamente.
 ```
+
+### 10.1 Geração de relatório — sempre manual
+
+**Nenhum fluxo automático envia as conversas para a IA gerar relatório.** A coleta
+encerra em `'saturated'` e fica aguardando o gestor decidir.
+
+Isso é deliberado: encerrar é decisão de quem conduz a investigação. O gestor pode
+querer incluir mais um participante, reler as conversas, ou simplesmente conferir o
+que foi coletado antes de concluir. Gerar sozinho também gastaria cota de IA do
+cliente sem que ele tivesse pedido.
+
+`generateReport()` e `generateWorkerReport()` só podem ser chamados a partir destas
+três rotas, todas acionadas por clique:
+
+| Rota | Origem |
+|---|---|
+| `POST /api/reports/[investigationId]` | Botão "Encerrar e gerar relatório" (gestor) |
+| `POST /api/reports/[investigationId]/devolutiva` | Botão "Gerar devolutiva" (gestor) |
+| `POST /api/admin/investigations/[id]/reprocess` | Botão "Reprocessar" (admin) |
+
+**Ao mexer neste fluxo, não reintroduza chamada automática** nas rotas do worker
+(`messages`, `audio`) nem no webhook do WhatsApp. Elas só podem alterar status.
+
+### 10.2 Dois relatórios, dois públicos
+
+| | Gerencial (`reports`) | Devolutiva (`worker_reports`) |
+|---|---|---|
+| Para quem | Liderança que vai decidir | Quem participou |
+| Atribuição | Por `anonymous_alias` + cargo | **Nenhuma** |
+| Exclusivos | `evidence_map`, `divergences`, `sensitive_observations` | — |
+| Pode circular | Não | Sim |
+
+A devolutiva é derivada do gerencial (exige que ele exista) para que as duas versões
+contem a mesma história.
+
+**Risco central da devolutiva: identificação por eliminação.** Se um cargo tem uma
+pessoa só, mencionar o cargo equivale a dar o nome. Por isso ela não atribui nada —
+nem por alias, nem por cargo, nem por detalhe específico (data, número de
+equipamento, episódio) que permita deduzir quem falou. Além da instrução no prompt,
+`removerAtribuicao()` em `worker-report-generator.ts` faz uma limpeza determinística
+antes de gravar.
 
 ---
 
