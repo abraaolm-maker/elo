@@ -146,7 +146,11 @@ export default async function ReportPage({ params }: RouteParams) {
               problemDescription={investigation.problem_description}
               companyName={company?.name ?? ''}
             />
-            <DevolutivaSection investigationId={investigationId} devolutivaInicial={devolutiva} />
+            <DevolutivaSection
+              investigationId={investigationId}
+              devolutivaInicial={devolutiva}
+              companyName={company?.name ?? ''}
+            />
           </div>
         ) : canGenerate ? (
           <div className="space-y-4">

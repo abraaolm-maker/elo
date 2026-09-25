@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useToast } from '@/components/ui/toast'
 import { ReportPrintable } from './ReportPrintable'
-import { ExportPdfButton } from './ExportPdfButton'
+import { ExportPdfButton, nomeRelatorioGerencial } from './ExportPdfButton'
 import { fmtDataHora } from '@/lib/utils/date'
 import type {
   IshikawaBreakdownOutput, SourceSummaryOutput, ActionPlanTimeframe,
@@ -296,7 +296,11 @@ export function ReportView({ investigationTitle, report, problemDescription = ''
             <ConfidenceMeter score={report.confidence_score} />
           </div>
         </div>
-        <ExportPdfButton className="shrink-0" />
+        <ExportPdfButton
+          className="shrink-0"
+          modo="relatorio"
+          nomeArquivo={nomeRelatorioGerencial(investigationTitle, companyName)}
+        />
       </div>
 
       {/* 2. CAUSA RAIZ */}

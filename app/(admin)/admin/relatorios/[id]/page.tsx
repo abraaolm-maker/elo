@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ReportPrintable } from '@/components/reports/ReportPrintable'
-import { ExportPdfButton } from '@/components/reports/ExportPdfButton'
+import { ExportPdfButton, nomeRelatorioGerencial } from '@/components/reports/ExportPdfButton'
 import { ConfirmDelete } from '@/components/ui/confirm-delete'
 import { fmtData } from '@/lib/utils/date'
 
@@ -88,7 +88,10 @@ export default function AdminRelatorioPage() {
         </div>
         {report && (
           <div className="flex items-center gap-2 shrink-0">
-            <ExportPdfButton />
+            <ExportPdfButton
+              modo="relatorio"
+              nomeArquivo={nomeRelatorioGerencial(investigation.title, company_name)}
+            />
             <button
               onClick={() => setConfirmando(true)}
               className="no-print inline-flex items-center gap-1.5 border border-slate-200 text-slate-500 text-[10px] font-semibold uppercase tracking-wider py-2.5 px-4 rounded-sm hover:border-red-200 hover:text-red-600 hover:bg-red-50 transition-colors"

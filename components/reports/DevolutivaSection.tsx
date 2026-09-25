@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useToast } from '@/components/ui/toast'
 import { fmtDataHora } from '@/lib/utils/date'
+import { ExportPdfButton, nomeDevolutiva } from './ExportPdfButton'
+import { DevolutivaPrintable } from './DevolutivaPrintable'
 import type { WorkerReportOutput } from '@/lib/ai/types'
 
 export interface DevolutivaData extends WorkerReportOutput {
@@ -12,6 +14,7 @@ export interface DevolutivaData extends WorkerReportOutput {
 interface Props {
   investigationId: string
   devolutivaInicial: DevolutivaData | null
+  companyName: string
 }
 
 /**
@@ -22,7 +25,7 @@ interface Props {
  * quem respondeu. Misturá-los na mesma visualização convidaria ao erro de
  * repassar o documento errado.
  */
-export function DevolutivaSection({ investigationId, devolutivaInicial }: Props) {
+export function DevolutivaSection({ investigationId, devolutivaInicial, companyName }: Props) {
   const [devolutiva, setDevolutiva] = useState<DevolutivaData | null>(devolutivaInicial)
   const [gerando, setGerando] = useState(false)
   const [copiado, setCopiado] = useState(false)
@@ -88,12 +91,20 @@ export function DevolutivaSection({ investigationId, devolutivaInicial }: Props)
 
         <div className="flex items-center gap-2 shrink-0">
           {devolutiva && (
-            <button
-              onClick={copiarTexto}
-              className="text-[10px] font-semibold uppercase tracking-wider border border-slate-200 text-slate-600 px-3 py-2 rounded-sm hover:bg-slate-50 transition-colors"
-            >
-              {copiado ? '✓ Copiado' : 'Copiar texto'}
-            </button>
+            <>
+              <button
+                onClick={copiarTexto}
+                className="text-[10px] font-semibold uppercase tracking-wider border border-slate-200 text-slate-600 px-3 py-2 rounded-sm hover:bg-slate-50 transition-colors"
+              >
+                {copiado ? '✓ Copiado' : 'Copiar texto'}
+              </button>
+              <ExportPdfButton
+                modo="devolutiva"
+                nomeArquivo={nomeDevolutiva(companyName)}
+                rotulo="PDF"
+                className="!py-2 !px-3"
+              />
+            </>
           )}
           <button
             onClick={gerar}
@@ -112,6 +123,15 @@ export function DevolutivaSection({ investigationId, devolutivaInicial }: Props)
           </button>
         </div>
       </div>
+
+      {/* Versão para impressão — invisível na tela */}
+      {devolutiva && (
+        <DevolutivaPrintable
+          {...devolutiva}
+          companyName={companyName}
+          generatedAt={devolutiva.generated_at}
+        />
+      )}
 
       {!devolutiva ? (
         <div className="mt-5 border border-dashed border-slate-200 rounded-sm px-6 py-8 text-center">

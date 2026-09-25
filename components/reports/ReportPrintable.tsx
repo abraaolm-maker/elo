@@ -495,9 +495,11 @@ const PRINT_CSS = `
 .rp-root { display: none; }
 
 @media print {
-  /* Esconde toda a aplicação, mostra apenas o relatório */
+  /* Esconde toda a aplicação. O documento a imprimir é escolhido pelo
+     data-imprimir no body — o relatório gerencial e a devolutiva convivem na
+     mesma tela, e sem isso os dois sairiam juntos no mesmo PDF. */
   body > * { display: none !important; }
-  body > .rp-portal, .rp-portal { display: block !important; }
+  body[data-imprimir="relatorio"] > .rp-portal { display: block !important; }
 
   html, body {
     background: #fff !important;
@@ -513,20 +515,26 @@ const PRINT_CSS = `
     print-color-adjust: exact;
   }
 
-  @page { size: A4; margin: 0; }
+  /* As margens ficam no @page, não no padding do bloco. Quando uma seção é mais
+     alta que uma folha, o navegador continua na folha seguinte respeitando a
+     margem da página — antes o conteúdo transbordado encostava no topo do
+     papel, porque o recuo existia só dentro do bloco. */
+  @page { size: A4; margin: 16mm 18mm 15mm; }
 
   .rp-page {
-    width: 210mm;
-    min-height: 297mm;
-    padding: 16mm 18mm 14mm;
     box-sizing: border-box;
     page-break-after: always;
     break-after: page;
     display: flex;
     flex-direction: column;
+    min-height: 267mm;   /* 297 menos as margens — mantém o rodapé embaixo */
     position: relative;
   }
   .rp-page:last-child { page-break-after: auto; break-after: auto; }
+
+  /* Nunca deixar uma ou duas linhas soltas na virada */
+  p, li { orphans: 3; widows: 3; }
+  h2, h3, .rp-sec-num, .rp-sub { break-after: avoid; page-break-after: avoid; }
 
   /* ── Header / Footer correntes ── */
   .rp-head {
@@ -544,7 +552,16 @@ const PRINT_CSS = `
   }
 
   /* ── Capa ── */
-  .rp-cover { background: #0F172A; color: #fff; justify-content: space-between; }
+  /* Puxa a capa para fora das margens da página e devolve o recuo por dentro,
+     para o fundo escuro chegar até a borda do papel */
+  .rp-cover {
+    background: #0F172A;
+    color: #fff;
+    justify-content: space-between;
+    margin: -16mm -18mm -15mm;
+    padding: 16mm 18mm 15mm;
+    min-height: 297mm;
+  }
   .rp-cover-brand { display: flex; align-items: center; gap: 3mm; }
   .rp-cover-mark {
     width: 9mm; height: 9mm; border-radius: 2mm;
@@ -703,6 +720,8 @@ const PRINT_CSS = `
   .rp-dim {
     border: .5pt solid #CCFBF1; background: #F0FDFA; border-radius: 2mm;
     padding: 4mm; page-break-inside: avoid; break-inside: avoid;
+    /* Afasta do topo quando o card abre uma página nova */
+    margin-top: 1mm;
   }
   .rp-dim-empty { border-color: #E2E8F0; background: #F8FAFC; }
   .rp-dim-head {
@@ -748,16 +767,25 @@ const PRINT_CSS = `
   }
 
   /* ── Plano de ação ── */
+  /* Prazo como faixa horizontal em vez de coluna lateral: a coluna consumia
+     28mm dos 174mm úteis em toda a extensão da seção, espremendo o texto das
+     ações sem necessidade */
   .rp-tf {
-    display: grid; grid-template-columns: 28mm 1fr; gap: 5mm;
-    padding-top: 4mm; margin-bottom: 5mm;
+    padding-top: 3mm; margin-bottom: 5mm;
     border-top: 1pt solid #0F172A;
+  }
+  .rp-tf-side {
+    display: flex; align-items: baseline; gap: 2.5mm;
+    margin-bottom: 3mm;
   }
   .rp-tf-lbl {
     font-size: 8pt; font-weight: 800; letter-spacing: .14em;
     text-transform: uppercase; color: #0F172A;
   }
-  .rp-tf-win { font-size: 6.5pt; color: #64748B; margin-top: 1mm; }
+  .rp-tf-win {
+    font-size: 6.5pt; color: #64748B;
+    border-left: .5pt solid #CBD5E1; padding-left: 2.5mm;
+  }
   .rp-tf-body { display: flex; flex-direction: column; gap: 3.5mm; }
   .rp-action { page-break-inside: avoid; break-inside: avoid; }
   .rp-action-what {
