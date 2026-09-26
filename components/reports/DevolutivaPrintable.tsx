@@ -162,8 +162,10 @@ const CSS = `
     print-color-adjust: exact;
   }
 
-  @page { size: A4; margin: 16mm 18mm 15mm; }
-  @page :first { margin: 0; }   /* capa sangra até a borda */
+  /* Margem uniforme zero; o recuo vem do padding do bloco e se repete em cada
+     folha via box-decoration-break. Usar @page :first com margem diferente
+     fazia o Chrome cortar o conteúdo nas laterais. */
+  @page { size: A4; margin: 0; }
 
   p, li { orphans: 3; widows: 3; }
   h1, h2 { break-after: avoid; page-break-after: avoid; }
@@ -173,7 +175,8 @@ const CSS = `
      diferença é proposital: são documentos para públicos distintos e não podem
      ser confundidos ao imprimir. */
   .dv-capa {
-    min-height: 296mm; padding: 22mm 20mm 16mm;
+    width: 210mm; height: 297mm; min-height: 297mm;
+    padding: 22mm 20mm 16mm;
     box-sizing: border-box;
     background: #F0FDFA;
     border-top: 6mm solid #0D9488;
@@ -300,9 +303,16 @@ const CSS = `
   .dv-foot {
     display: flex; justify-content: space-between;
     font-size: 6.5pt; color: #94A3B8; letter-spacing: .04em;
-    border-top: .5pt solid #E2E8F0; padding-top: 4mm; margin-top: auto;
+    border-top: .5pt solid #E2E8F0; padding-top: 4mm; margin-top: 12mm;
+    break-inside: avoid;
   }
 
-  .dv-page { display: flex; flex-direction: column; min-height: 266mm; }
+  .dv-page {
+    width: 210mm; box-sizing: border-box;
+    padding: 16mm 18mm 15mm;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    min-height: 297mm;
+  }
 }
 `

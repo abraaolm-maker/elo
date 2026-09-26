@@ -448,18 +448,52 @@ function ReportPrintableContent(props: ReportPrintableProps) {
               <div className="rp-tf-body">
                 {items.map((it, i) => (
                   <div key={i} className="rp-action">
-                    <div className="rp-action-what">
-                      {it.what}
-                      {it.is_recurring_pattern && <span className="rp-recur">PADRÃO RECORRENTE</span>}
+                    <div className="rp-action-head">
+                      <span className="rp-action-n">{i + 1}</span>
+                      <div className="rp-action-titulo">
+                        {it.what}
+                        {it.is_recurring_pattern && <span className="rp-recur">PADRÃO RECORRENTE</span>}
+                      </div>
                     </div>
+
                     <p className="rp-action-why">{it.why}</p>
-                    <p className="rp-action-how"><strong>Como executar.</strong> {it.how_to}</p>
-                    <div className="rp-action-meta">
-                      {it.who_role && <span>Responsável: {it.who_role}</span>}
-                      {it.where_scope && <span>Escopo: {it.where_scope}</span>}
-                      {it.how_much_estimate && <span>Estimativa: {it.how_much_estimate}</span>}
-                      <span>Impacto {it.impact_score}/100</span>
-                      <span>Esforço {it.effort_score}/100</span>
+
+                    {/* O passo a passo ganha bloco próprio: é a parte mais
+                        consultada e se perdia dentro do parágrafo corrido */}
+                    <div className="rp-action-como">
+                      <div className="rp-action-como-lbl">Como executar</div>
+                      <p>{it.how_to}</p>
+                    </div>
+
+                    {/* Atributos em grade rotulada em vez de pílulas soltas —
+                        o olho encontra "Responsável" sem varrer a linha */}
+                    {(it.who_role || it.where_scope || it.how_much_estimate) && (
+                      <table className="rp-action-grade">
+                        <tbody>
+                          {it.who_role && <tr><th>Responsável</th><td>{it.who_role}</td></tr>}
+                          {it.where_scope && <tr><th>Escopo</th><td>{it.where_scope}</td></tr>}
+                          {it.how_much_estimate && <tr><th>Estimativa</th><td>{it.how_much_estimate}</td></tr>}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {/* Impacto e esforço como barras: comparar ações entre si
+                        fica imediato, o que número solto não entrega */}
+                    <div className="rp-scores">
+                      <div className="rp-score">
+                        <span className="rp-score-lbl">Impacto</span>
+                        <span className="rp-score-barra">
+                          <span className="rp-score-fill rp-score-imp" style={{ width: `${it.impact_score}%` }} />
+                        </span>
+                        <span className="rp-score-num">{it.impact_score}</span>
+                      </div>
+                      <div className="rp-score">
+                        <span className="rp-score-lbl">Esforço</span>
+                        <span className="rp-score-barra">
+                          <span className="rp-score-fill rp-score-esf" style={{ width: `${it.effort_score}%` }} />
+                        </span>
+                        <span className="rp-score-num">{it.effort_score}</span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -480,65 +514,12 @@ function ReportPrintableContent(props: ReportPrintableProps) {
         </section>
       )}
 
-      {/* ═══ 06 — FONTES ═══
-          Movido para o fim de propósito: é material de consulta, não linha de
-          raciocínio. O gestor que quiser conferir a origem de um achado vem
-          aqui; quem só precisa decidir para nas recomendações. */}
-      {sources.length > 0 && (
-        <section className="rp-page">
-          <Head section="ANEXO · FONTES CONSULTADAS" />
-
-          <div className="rp-sec-num">06 — ANEXO: FONTES</div>
-          <h2 className="rp-sec-title">De onde veio cada informação.</h2>
-          <p className="rp-sec-lead">
-            Material de consulta. Reúne os pontos-chave que cada fonte trouxe ao longo da
-            investigação, de forma anonimizada — use para rastrear a origem de um achado
-            específico. {sources.length} fonte(s), {totalKeyPoints} ponto(s) registrado(s).
-          </p>
-
-          <table className="rp-table rp-table-tight">
-            <thead>
-              <tr><th>Fonte</th><th>Cargo</th><th>Pontos</th></tr>
-            </thead>
-            <tbody>
-              {sources.map((s, i) => (
-                <tr key={i}>
-                  <td><strong>{s.alias}</strong></td>
-                  <td>{s.role}</td>
-                  <td>{s.key_points.length}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="rp-sources">
-            {sources.map((s, i) => (
-              <div key={i} className="rp-source">
-                <div className="rp-source-head">
-                  <span className="rp-source-alias">{s.alias}</span>
-                  <span className="rp-source-role">{s.role}</span>
-                </div>
-                {s.key_points.length > 0 ? (
-                  <ul className="rp-source-pts">
-                    {s.key_points.map((kp, j) => <li key={j}>{kp}</li>)}
-                  </ul>
-                ) : (
-                  <p className="rp-dim-txt">Sem pontos registrados.</p>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <Footer n="07" />
-        </section>
-      )}
-
-      {/* ═══ 07 — ENCERRAMENTO ═══ */}
+      {/* ═══ 06 — PRÓXIMOS PASSOS ═══ */}
       <section className="rp-page">
-        <Head section="ENCERRAMENTO" />
+        <Head section="PRÓXIMOS PASSOS" />
 
-        <div className="rp-sec-num">07 — CONSIDERAÇÕES FINAIS</div>
-        <h2 className="rp-sec-title">Próximos passos.</h2>
+        <div className="rp-sec-num">06 — PRÓXIMOS PASSOS</div>
+        <h2 className="rp-sec-title">O que fazer a seguir.</h2>
         <p className="rp-sec-lead">
           Este relatório é um instantâneo técnico: captura a causa raiz de um problema específico
           no momento em que foi investigado. Seu valor maior está em transformar percepção difusa
@@ -583,8 +564,61 @@ function ReportPrintableContent(props: ReportPrintableProps) {
           </div>
         </div>
 
-        <Footer n="08" />
+        <Footer n="07" />
       </section>
+
+      {/* ═══ 07 — ANEXO: FONTES ═══
+          Última seção de propósito: material de consulta, não linha de
+          raciocínio. Quem só precisa decidir para nas recomendações; quem
+          quiser rastrear a origem de um achado vem até aqui. */}
+      {sources.length > 0 && (
+        <section className="rp-page">
+          <Head section="ANEXO · FONTES CONSULTADAS" />
+
+          <div className="rp-sec-num">07 — ANEXO: FONTES</div>
+          <h2 className="rp-sec-title">De onde veio cada informação.</h2>
+          <p className="rp-sec-lead">
+            Material de consulta. Reúne os pontos-chave que cada fonte trouxe ao longo da
+            investigação, de forma anonimizada — use para rastrear a origem de um achado
+            específico. {sources.length} fonte(s), {totalKeyPoints} ponto(s) registrado(s).
+          </p>
+
+          <table className="rp-table rp-table-tight">
+            <thead>
+              <tr><th>Fonte</th><th>Cargo</th><th>Pontos</th></tr>
+            </thead>
+            <tbody>
+              {sources.map((s, i) => (
+                <tr key={i}>
+                  <td><strong>{s.alias}</strong></td>
+                  <td>{s.role}</td>
+                  <td>{s.key_points.length}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="rp-sources">
+            {sources.map((s, i) => (
+              <div key={i} className="rp-source">
+                <div className="rp-source-head">
+                  <span className="rp-source-alias">{s.alias}</span>
+                  <span className="rp-source-role">{s.role}</span>
+                </div>
+                {s.key_points.length > 0 ? (
+                  <ul className="rp-source-pts">
+                    {s.key_points.map((kp, j) => <li key={j}>{kp}</li>)}
+                  </ul>
+                ) : (
+                  <p className="rp-dim-txt">Sem pontos registrados.</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <Footer n="08" />
+        </section>
+      )}
     </div>
   )
 }
@@ -621,19 +655,24 @@ const PRINT_CSS = `
      alta que uma folha, o navegador continua na folha seguinte respeitando a
      margem da página — antes o conteúdo transbordado encostava no topo do
      papel, porque o recuo existia só dentro do bloco. */
-  @page { size: A4; margin: 16mm 18mm 15mm; }
-  /* A capa sangra até a borda do papel; só ela dispensa margem de página. As
-     margens negativas que tentavam isso antes deixavam faixas brancas nas
-     laterais, porque o bloco não chegava aos 210mm. */
-  @page :first { margin: 0; }
+  /* Margem zero e uniforme em todas as páginas.
+     Tentei antes margens no @page com @page :first para a capa sangrar — o
+     Chrome passou a calcular larguras diferentes entre a primeira página e as
+     demais, e o conteúdo saía cortado nas laterais.
+     O recuo volta para o padding do bloco, e box-decoration-break: clone faz
+     esse padding se repetir em cada folha quando a seção transborda. É o que
+     impede o conteúdo de encostar no topo da página seguinte. */
+  @page { size: A4; margin: 0; }
 
   .rp-page {
+    width: 210mm;
     box-sizing: border-box;
+    padding: 16mm 18mm 15mm;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
     page-break-after: always;
     break-after: page;
-    display: flex;
-    flex-direction: column;
-    min-height: 267mm;   /* 297 menos as margens — mantém o rodapé embaixo */
+    min-height: 297mm;
     position: relative;
   }
   .rp-page:last-child { page-break-after: auto; break-after: auto; }
@@ -650,21 +689,29 @@ const PRINT_CSS = `
     padding-bottom: 5mm; margin-bottom: 8mm;
     border-bottom: .5pt solid #E2E8F0;
   }
+  /* Sem flex no bloco da página, o rodapé flui após o conteúdo em vez de
+     grudar na base — troca consciente: margem correta em toda folha vale mais
+     do que rodapé fixado no pé */
   .rp-foot {
-    margin-top: auto; padding-top: 5mm;
+    margin-top: 12mm; padding-top: 5mm;
     border-top: .5pt solid #E2E8F0;
     display: flex; justify-content: space-between;
     font-size: 6.5pt; color: #94A3B8; letter-spacing: .04em;
+    break-inside: avoid;
   }
 
   /* ── Capa ── */
-  /* Sua página não tem margem (@page :first), então o recuo vem do padding */
+  /* Única seção com flex, para empurrar o rodapé à base e o fundo escuro
+     preencher os 297mm inteiros da folha */
   .rp-cover {
     background: #0F172A;
     color: #fff;
+    display: flex;
+    flex-direction: column;
     justify-content: space-between;
-    padding: 20mm 18mm 16mm;
-    min-height: 296mm;   /* 1mm abaixo da folha: evita empurrar página em branco */
+    padding: 22mm 18mm 16mm;
+    height: 297mm;
+    min-height: 297mm;
   }
   .rp-cover-brand { display: flex; align-items: center; gap: 3mm; }
   .rp-cover-mark {
@@ -957,25 +1004,66 @@ const PRINT_CSS = `
     font-size: 6.5pt; color: #64748B;
     border-left: .5pt solid #CBD5E1; padding-left: 2.5mm;
   }
-  .rp-tf-body { display: flex; flex-direction: column; gap: 3.5mm; }
-  .rp-action { page-break-inside: avoid; break-inside: avoid; }
-  .rp-action-what {
-    font-size: 8.5pt; font-weight: 700; color: #0F172A;
-    line-height: 1.45; margin-bottom: 1.5mm;
+  .rp-tf-body { display: flex; flex-direction: column; gap: 4mm; }
+  .rp-action {
+    page-break-inside: avoid; break-inside: avoid;
+    border: .5pt solid #E2E8F0; border-radius: 2mm; padding: 4mm;
   }
+  .rp-action-head { display: flex; gap: 3mm; align-items: flex-start; margin-bottom: 2mm; }
+  .rp-action-n {
+    width: 5mm; height: 5mm; border-radius: 1mm; flex-shrink: 0;
+    background: #0F172A; color: #fff; font-size: 7pt; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rp-action-titulo { font-size: 8.5pt; font-weight: 700; color: #0F172A; line-height: 1.45; }
   .rp-recur {
+    display: inline-block;
     font-size: 5.5pt; font-weight: 700; letter-spacing: .1em;
     background: #FEE2E2; color: #B91C1C;
     padding: .6mm 1.6mm; border-radius: 3mm; margin-left: 2mm;
     white-space: nowrap;
   }
-  .rp-action-why { font-size: 7.5pt; line-height: 1.55; color: #475569; margin: 0 0 1.5mm; }
-  .rp-action-how { font-size: 7.5pt; line-height: 1.55; color: #334155; margin: 0 0 2mm; }
-  .rp-action-meta { display: flex; flex-wrap: wrap; gap: 1.5mm; }
-  .rp-action-meta span {
-    font-size: 6pt; letter-spacing: .06em; text-transform: uppercase;
-    background: #F1F5F9; color: #475569;
-    padding: .8mm 1.8mm; border-radius: 1mm;
+  .rp-action-why {
+    font-size: 7.5pt; line-height: 1.55; color: #475569;
+    margin: 0 0 2.5mm; padding-left: 8mm;
+  }
+
+  .rp-action-como {
+    background: #F8FAFC; border-left: 1.5pt solid #CBD5E1;
+    padding: 2.5mm 3mm; margin: 0 0 2.5mm 8mm; border-radius: 0 1mm 1mm 0;
+  }
+  .rp-action-como-lbl {
+    font-size: 6pt; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: #64748B; margin-bottom: 1mm;
+  }
+  .rp-action-como p { font-size: 7.5pt; line-height: 1.6; color: #334155; margin: 0; }
+
+  .rp-action-grade { width: calc(100% - 8mm); margin: 0 0 2.5mm 8mm; border-collapse: collapse; }
+  .rp-action-grade th {
+    width: 26mm; text-align: left; vertical-align: top;
+    font-size: 6pt; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: #94A3B8; padding: .8mm 3mm .8mm 0;
+  }
+  .rp-action-grade td {
+    font-size: 7.5pt; line-height: 1.5; color: #334155; padding: .8mm 0;
+  }
+
+  .rp-scores { display: flex; gap: 6mm; margin-left: 8mm; }
+  .rp-score { display: flex; align-items: center; gap: 2mm; flex: 1; }
+  .rp-score-lbl {
+    font-size: 6pt; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: #94A3B8; width: 14mm; flex-shrink: 0;
+  }
+  .rp-score-barra {
+    flex: 1; height: 1.8mm; background: #F1F5F9; border-radius: 2mm;
+    overflow: hidden; display: block;
+  }
+  .rp-score-fill { display: block; height: 100%; border-radius: 2mm; }
+  .rp-score-imp { background: #0D9488; }
+  .rp-score-esf { background: #F59E0B; }
+  .rp-score-num {
+    font-size: 6.5pt; font-weight: 700; color: #475569;
+    width: 6mm; text-align: right; flex-shrink: 0;
   }
 
   /* ── Recomendações ── */
