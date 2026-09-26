@@ -81,7 +81,9 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
       problem_description: investigation.problem_description,
     }
 
-    const { allMessages, workerAliases, descartadasSemConteudo } = await montarEntradaRelatorio(investigationId)
+    // comNomes: o relatório gerencial identifica quem disse o quê
+    const { allMessages, workerAliases, descartadasSemConteudo } =
+      await montarEntradaRelatorio(investigationId, { comNomes: true })
 
     // ── Fase: análise ────────────────────────────────────────────────────────
     if (fase === 'analise') {

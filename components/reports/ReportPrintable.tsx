@@ -29,7 +29,7 @@ export interface ReportPrintableProps {
   confidenceScore: number
   confidenceJustification: string | null
   ishikawa: Partial<Record<IshikawaKey, string | null>>
-  sources: { alias: string; role: string; key_points: string[] }[]
+  sources: { alias: string; role: string; name?: string; key_points: string[] }[]
   recommendations: string[]
   actionItems?: PrintableActionItem[]
   // Camada de evidências — exclusiva do relatório gerencial
@@ -590,7 +590,7 @@ function ReportPrintableContent(props: ReportPrintableProps) {
             <tbody>
               {sources.map((s, i) => (
                 <tr key={i}>
-                  <td><strong>{s.alias}</strong></td>
+                  <td><strong>{s.name ?? s.alias}</strong></td>
                   <td>{s.role}</td>
                   <td>{s.key_points.length}</td>
                 </tr>
@@ -602,8 +602,10 @@ function ReportPrintableContent(props: ReportPrintableProps) {
             {sources.map((s, i) => (
               <div key={i} className="rp-source">
                 <div className="rp-source-head">
-                  <span className="rp-source-alias">{s.alias}</span>
-                  <span className="rp-source-role">{s.role}</span>
+                  <span className="rp-source-alias">{s.name ?? s.alias}</span>
+                  <span className="rp-source-role">
+                    {s.role}{s.name ? ` · ${s.alias}` : ''}
+                  </span>
                 </div>
                 {s.key_points.length > 0 ? (
                   <ul className="rp-source-pts">
@@ -672,8 +674,10 @@ const PRINT_CSS = `
     box-decoration-break: clone;
     page-break-after: always;
     break-after: page;
-    min-height: 297mm;
     position: relative;
+    /* Sem min-height de propósito: com 297mm exatos numa folha de 297mm, o
+       arredondamento empurrava uma fatia para a página seguinte — que saía
+       contendo só o rodapé. Eram as páginas em branco do PDF. */
   }
   .rp-page:last-child { page-break-after: auto; break-after: auto; }
 
@@ -693,7 +697,7 @@ const PRINT_CSS = `
      grudar na base — troca consciente: margem correta em toda folha vale mais
      do que rodapé fixado no pé */
   .rp-foot {
-    margin-top: 12mm; padding-top: 5mm;
+    margin-top: 10mm; padding-top: 5mm;
     border-top: .5pt solid #E2E8F0;
     display: flex; justify-content: space-between;
     font-size: 6.5pt; color: #94A3B8; letter-spacing: .04em;

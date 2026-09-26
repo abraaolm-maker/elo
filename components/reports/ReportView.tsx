@@ -462,7 +462,14 @@ export function ReportView({ investigationTitle, report, problemDescription = ''
                     <span className="text-xs font-bold">{source.alias.charAt(source.alias.length - 1)}</span>
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">{source.alias}</p>
+                    {/* Nome real quando houver; o alias fica ao lado para
+                        cruzar com a devolutiva, que só usa alias */}
+                    <p className="text-sm font-semibold text-slate-900">
+                      {source.name ?? source.alias}
+                      {source.name && (
+                        <span className="ml-2 text-[10px] font-normal text-slate-400">{source.alias}</span>
+                      )}
+                    </p>
                     <p className="text-[10px] font-mono text-slate-400">{source.role}</p>
                   </div>
                 </div>

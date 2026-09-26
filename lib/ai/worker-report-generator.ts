@@ -46,9 +46,12 @@ function asStringArray(v: unknown): string[] {
 function removerAtribuicao(texto: string, aliases: string[]): string {
   let saida = texto
 
-  for (const alias of aliases) {
-    if (!alias) continue
-    const re = new RegExp(alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+  // Aliases e, por precaução, nomes reais: desde que o relatório gerencial
+  // passou a identificar as pessoas, um nome pode chegar aqui por engano em
+  // algum caminho futuro. A devolutiva não pode carregá-lo em hipótese alguma.
+  for (const termo of aliases) {
+    if (!termo || termo.length < 3) continue
+    const re = new RegExp(termo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
     saida = saida.replace(re, 'o levantamento')
   }
 
@@ -104,7 +107,8 @@ function validar(raw: unknown, aliases: string[]): WorkerReportOutput {
 /** Gera a devolutiva destinada aos participantes. */
 export async function generateWorkerReport(input: WorkerReportInput): Promise<WorkerReportOutput> {
   const client = new Anthropic({ apiKey: env('ANTHROPIC_API_KEY') })
-  const aliases = input.workerAliases.map(w => w.alias)
+  // Alias e nome (quando houver) entram na lista de termos a remover do texto
+  const aliases = input.workerAliases.flatMap(w => [w.alias, ...(w.name ? [w.name] : [])])
 
   let ultimoErro: unknown
   for (let tentativa = 0; tentativa <= RETRY_DELAYS.length; tentativa++) {

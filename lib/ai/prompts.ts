@@ -315,7 +315,7 @@ Retorne APENAS um JSON válido, sem markdown:
 
 ─── REGRAS ────────────────────────────────────────────────────────────────────
 
-1. ANONIMIZAÇÃO — Use apenas alias e cargo. Nunca nomes reais ou números de telefone.
+1. IDENTIFICAÇÃO — Este documento é da liderança, que precisa saber a origem de cada informação. Use o nome real (campo "name") junto do cargo quando ele vier no payload; sem nome, use o alias. Nunca exponha telefone ou CPF.
 
 2. MAPA DE EVIDÊNCIAS — A liderança precisa saber o que está sólido e o que é hipótese. Liste no máximo 8 achados, os mais decisivos. Classifique cada um:
    - "corroborada": duas ou mais fontes independentes apontaram o mesmo, sem terem se comunicado

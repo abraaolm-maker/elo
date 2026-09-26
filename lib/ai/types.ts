@@ -52,6 +52,8 @@ export interface InvestigationEngineOutput {
 export interface ReportMessageEntry {
   alias: string
   role: string
+  /** Nome real — presente apenas no relatório gerencial, nunca na devolutiva */
+  name?: string
   direction: 'outbound' | 'inbound'
   content: string
   key_points_extracted?: string[]
@@ -60,6 +62,8 @@ export interface ReportMessageEntry {
 export interface WorkerAlias {
   alias: string
   role: string
+  /** Nome real — presente apenas no relatório gerencial, nunca na devolutiva */
+  name?: string
 }
 
 export interface ReportGeneratorInput {
@@ -87,6 +91,8 @@ export interface IshikawaBreakdownOutput {
 export interface SourceSummaryOutput {
   alias: string
   role: string
+  /** Nome real — só no relatório gerencial */
+  name?: string
   key_points: string[]
 }
 

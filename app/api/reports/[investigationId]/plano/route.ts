@@ -65,7 +65,7 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
     const orcamento = await canSpendOnAi(investigation.company_id)
     if (!orcamento.ok) return Response.json({ error: orcamento.reason }, { status: 403 })
 
-    const { allMessages, workerAliases } = await montarEntradaRelatorio(investigationId)
+    const { allMessages, workerAliases } = await montarEntradaRelatorio(investigationId, { comNomes: true })
 
     const { itens, telemetria } = await generateActionPlan({
       investigation: { title: investigation.title, problem_description: investigation.problem_description },

@@ -96,7 +96,7 @@ async function chamar(
 const REGRAS_COMUNS = `
 ─── REGRAS ────────────────────────────────────────────────────────────────────
 
-ANONIMIZAÇÃO — Use apenas o alias ("Colaborador A") e o cargo. Nunca nomes reais, nunca números de telefone.
+IDENTIFICAÇÃO — Este relatório é para a liderança, que precisa saber quem trouxe cada informação. Use o nome real da pessoa (campo "name") junto do cargo sempre que ele vier no payload; se não vier, use o alias. Nunca exponha número de telefone ou CPF.
 
 ESCRITA DENSA — Sem preâmbulo, sem adjetivo desnecessário, sem repetir o que já foi dito. Não é limite de conteúdo: registre tudo o que for relevante, apenas sem encher linguiça.
 
@@ -187,11 +187,11 @@ Você receberá um JSON com investigation, rootCause (a causa raiz apurada), fon
 Retorne exatamente:
 {
   "sources_summary": [
-    { "alias": "Colaborador A", "role": "cargo", "key_points": ["ponto que esta fonte trouxe", "..."] }
+    { "alias": "Colaborador A", "name": "nome real recebido em fontes", "role": "cargo", "key_points": ["ponto que esta fonte trouxe", "..."] }
   ]
 }
 
-UM ITEM POR FONTE — Devolva exatamente uma entrada para cada alias recebido em "fontes", na mesma ordem, mesmo que a pessoa tenha contribuído pouco (nesse caso, key_points curto ou vazio).
+UM ITEM POR FONTE — Devolva exatamente uma entrada para cada alias recebido em "fontes", na mesma ordem, mesmo que a pessoa tenha contribuído pouco (nesse caso, key_points curto ou vazio). Repita o "alias" exatamente como recebido e copie o "name" do payload quando ele existir.
 
 PONTOS, NÃO TRANSCRIÇÃO — Cada key_point é uma informação que aquela fonte trouxe, escrita de forma autônoma. Registre tudo o que for relevante para o diagnóstico; não há limite de quantidade.
 
@@ -219,13 +219,20 @@ export async function gerarFontes(
 
   const fontes = (r.sources_summary as unknown[])
     .filter((s): s is Record<string, unknown> => typeof s === 'object' && s !== null)
-    .map(s => ({
-      alias: typeof s.alias === 'string' ? s.alias : '',
-      role: typeof s.role === 'string' ? s.role : '',
-      key_points: Array.isArray(s.key_points)
-        ? (s.key_points as unknown[]).filter((k): k is string => typeof k === 'string')
-        : [],
-    }))
+    .map(s => {
+      const alias = typeof s.alias === 'string' ? s.alias : ''
+      // O nome vem do banco, não do que a IA devolveu — evita nome inventado
+      // ou trocado entre fontes
+      const doBanco = input.fontes.find(f => f.alias === alias)
+      return {
+        alias,
+        role: doBanco?.role ?? (typeof s.role === 'string' ? s.role : ''),
+        ...(doBanco?.name ? { name: doBanco.name } : {}),
+        key_points: Array.isArray(s.key_points)
+          ? (s.key_points as unknown[]).filter((k): k is string => typeof k === 'string')
+          : [],
+      }
+    })
     .filter(s => s.alias.length > 0)
 
   // Conferência de cobertura: toda fonte pedida precisa voltar. Sem isto, um

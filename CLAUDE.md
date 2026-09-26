@@ -793,7 +793,7 @@ três rotas, todas acionadas por clique:
 | | Gerencial (`reports`) | Devolutiva (`worker_reports`) |
 |---|---|---|
 | Para quem | Liderança que vai decidir | Quem participou |
-| Atribuição | Por `anonymous_alias` + cargo | **Nenhuma** |
+| Atribuição | **Nome real** + cargo (alias ao lado) | **Nenhuma** |
 | Exclusivos | `evidence_map`, `divergences`, `sensitive_observations` | — |
 | Pode circular | Não | Sim |
 

@@ -34,22 +34,34 @@ export function filtrarPorAlias(msgs: ReportMessageEntry[], alias: string): Repo
   return msgs.filter(m => m.alias === alias)
 }
 
-export async function montarEntradaRelatorio(investigationId: string): Promise<ReportInputData> {
+/**
+ * @param comNomes  true no relatório gerencial, onde a liderança precisa saber
+ *   quem disse o quê. Sempre false na devolutiva aos participantes: lá o nome
+ *   não pode sequer chegar à IA, para não haver como vazar.
+ */
+export async function montarEntradaRelatorio(
+  investigationId: string,
+  { comNomes = false }: { comNomes?: boolean } = {}
+): Promise<ReportInputData> {
   const iwRows = await db
     .select({
       worker_id: schema.investigation_workers.worker_id,
       alias: schema.workers.anonymous_alias,
       role: schema.workers.role,
+      name: schema.workers.name,
+      full_name: schema.workers.full_name,
     })
     .from(schema.investigation_workers)
     .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
     .where(eq(schema.investigation_workers.investigation_id, investigationId))
 
-  const aliasMap = new Map<string, { alias: string; role: string }>()
+  const aliasMap = new Map<string, { alias: string; role: string; name?: string }>()
   const workerAliases: WorkerAlias[] = []
   for (const row of iwRows) {
-    aliasMap.set(row.worker_id, { alias: row.alias, role: row.role })
-    workerAliases.push({ alias: row.alias, role: row.role })
+    // full_name quando existe, senão o nome curto do cadastro
+    const nome = comNomes ? ((row.full_name?.trim() || row.name?.trim()) ?? undefined) : undefined
+    aliasMap.set(row.worker_id, { alias: row.alias, role: row.role, name: nome })
+    workerAliases.push({ alias: row.alias, role: row.role, ...(nome ? { name: nome } : {}) })
   }
 
   const msgRows = await db
@@ -70,6 +82,7 @@ export async function montarEntradaRelatorio(investigationId: string): Promise<R
       return {
         alias: info.alias,
         role: info.role,
+        ...(info.name ? { name: info.name } : {}),
         direction: m.direction as 'outbound' | 'inbound',
         content: m.content as string,
         key_points_extracted: parseJson<string[]>(m.key_points_extracted),

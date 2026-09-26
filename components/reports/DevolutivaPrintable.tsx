@@ -60,7 +60,7 @@ function Conteudo({
 
         <div className="dv-capa-rodape">
           <div className="dv-capa-selo">
-            Suas respostas foram tratadas de forma anônima. Nada aqui identifica quem disse o quê.
+            Suas respostas foram tratadas de forma anônima.
           </div>
           <div className="dv-capa-meta">
             <span>{companyName}</span>
@@ -210,7 +210,7 @@ const CSS = `
   .dv-capa-selo {
     background: #fff; border: .5pt solid #99F6E4; border-radius: 2mm;
     padding: 3.5mm 4mm; font-size: 8pt; color: #0F766E; line-height: 1.55;
-    margin-bottom: 4mm;
+    margin-bottom: 4mm; text-align: center;
   }
   .dv-capa-meta {
     display: flex; justify-content: space-between;
@@ -307,12 +307,13 @@ const CSS = `
     break-inside: avoid;
   }
 
+  /* Sem min-height: 297mm exatos numa folha de 297mm faziam transbordar uma
+     fatia, gerando página em branco com só o rodapé */
   .dv-page {
     width: 210mm; box-sizing: border-box;
     padding: 16mm 18mm 15mm;
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
-    min-height: 297mm;
   }
 }
 `

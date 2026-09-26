@@ -279,25 +279,25 @@ export default function WorkerPortal() {
             <li className="flex gap-2">
               <span className="text-teal-600 shrink-0">•</span>
               <span>
-                <strong>Seu nome nunca aparece.</strong>{' '}
+                <strong>A liderança vê o que você respondeu.</strong>{' '}
                 {managerName ? `${managerName} e a liderança recebem` : 'A liderança recebe'}{' '}
-                um relatório onde você é identificado apenas como
-                &ldquo;Colaborador&rdquo; e pelo seu cargo.
+                um relatório técnico em que suas respostas aparecem junto do seu nome e cargo.
+                É esse relatório que embasa as decisões.
               </span>
             </li>
             <li className="flex gap-2">
               <span className="text-teal-600 shrink-0">•</span>
               <span>
-                <strong>Ninguém vê suas respostas individualmente.</strong> Elas entram em uma
-                análise conjunta com as demais. O relatório final mostra as causas encontradas,
-                não quem disse o quê.
+                <strong>Para o restante do time, você não é identificado.</strong> Existe uma
+                segunda versão, compartilhada com todos os participantes, que traz apenas as
+                conclusões — sem nome, sem cargo e sem indicar quem disse o quê.
               </span>
             </li>
             <li className="flex gap-2">
               <span className="text-teal-600 shrink-0">•</span>
               <span>
                 <strong>O CPF serve só para confirmar que é você.</strong> É guardado de forma
-                criptografada e não aparece em nenhum relatório.
+                criptografada e não aparece em relatório nenhum. Seu telefone também não.
               </span>
             </li>
             <li className="flex gap-2">
