@@ -8,11 +8,15 @@ import { ReportPrintable } from '@/components/reports/ReportPrintable'
 import { ExportPdfButton, nomeRelatorioGerencial } from '@/components/reports/ExportPdfButton'
 import { ConfirmDelete } from '@/components/ui/confirm-delete'
 import { fmtData } from '@/lib/utils/date'
+import type { EvidenceItemOutput, DivergenceOutput } from '@/lib/ai/types'
 
 interface IshikawaBreakdown { mao_de_obra: string | null; maquina: string | null; metodo: string | null; material: string | null; meio_ambiente: string | null; medicao: string | null }
 interface SourceSummary { alias: string; role: string; key_points: string[] }
 interface Report {
   id: string
+  evidence_map: string | null
+  divergences: string | null
+  sensitive_observations: string | null
   root_cause: string
   confidence_score: number
   confidence_justification: string | null
@@ -153,6 +157,9 @@ export default function AdminRelatorioPage() {
             ishikawa={ishikawa}
             sources={sources}
             recommendations={recs}
+            evidenceMap={parseJson<EvidenceItemOutput[]>(report.evidence_map, [])}
+            divergences={parseJson<DivergenceOutput[]>(report.divergences, [])}
+            sensitiveObservations={parseJson<string[]>(report.sensitive_observations, [])}
           />
 
           {/* Causa raiz */}

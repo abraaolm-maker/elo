@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { ActionPlanTimeframe } from '@/lib/ai/types'
+import type { ActionPlanTimeframe, EvidenceItemOutput, DivergenceOutput } from '@/lib/ai/types'
 import { fmtDataExtenso, fmtMesAno } from '@/lib/utils/date'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -32,6 +32,17 @@ export interface ReportPrintableProps {
   sources: { alias: string; role: string; key_points: string[] }[]
   recommendations: string[]
   actionItems?: PrintableActionItem[]
+  // Camada de evidências — exclusiva do relatório gerencial
+  evidenceMap?: EvidenceItemOutput[]
+  divergences?: DivergenceOutput[]
+  sensitiveObservations?: string[]
+}
+
+/** Força da evidência — mesma linguagem visual usada na tela. */
+const FORCA: Record<string, { rotulo: string; classe: string; tag: string }> = {
+  corroborada: { rotulo: 'CORROBORADA', classe: 'rp-evid-ok',   tag: 'rp-tag-ok' },
+  fonte_unica: { rotulo: 'FONTE ÚNICA', classe: 'rp-evid-unica', tag: 'rp-tag-unica' },
+  divergente:  { rotulo: 'DIVERGENTE',  classe: 'rp-evid-div',   tag: 'rp-tag-div' },
 }
 
 type IshikawaKey = 'mao_de_obra' | 'maquina' | 'metodo' | 'material' | 'meio_ambiente' | 'medicao'
@@ -97,6 +108,7 @@ function ReportPrintableContent(props: ReportPrintableProps) {
     investigationTitle, problemDescription, companyName, generatedAt,
     rootCause, confidenceScore, confidenceJustification,
     ishikawa, sources, recommendations, actionItems = [],
+    evidenceMap = [], divergences = [], sensitiveObservations = [],
   } = props
 
   const band = confidenceBand(confidenceScore)
@@ -328,51 +340,88 @@ function ReportPrintableContent(props: ReportPrintableProps) {
         <Footer n="04" />
       </section>
 
-      {/* ═══ 04 — FONTES ═══ */}
-      {sources.length > 0 && (
+      {/* ═══ 04 — EVIDÊNCIAS ═══ */}
+      {(evidenceMap.length > 0 || divergences.length > 0 || sensitiveObservations.length > 0) && (
         <section className="rp-page">
-          <Head section="FONTES CONSULTADAS" />
+          <Head section="ESTRUTURA DE EVIDÊNCIAS" />
 
-          <div className="rp-sec-num">04 — FONTES</div>
-          <h2 className="rp-sec-title">Quem foi ouvido e o que foi dito.</h2>
+          <div className="rp-sec-num">04 — EVIDÊNCIAS</div>
+          <h2 className="rp-sec-title">O que sustenta cada conclusão.</h2>
           <p className="rp-sec-lead">
-            Pontos-chave extraídos de cada fonte ao longo da investigação, apresentados de forma
-            anonimizada. {sources.length} fonte(s) consultada(s), {totalKeyPoints} ponto(s)
-            relevante(s) registrado(s).
+            Antes de decidir onde investir, vale saber o que está confirmado por mais de uma fonte
+            independente e o que ainda é relato isolado. Achados corroborados sustentam ação
+            imediata; achados de fonte única pedem confirmação antes de intervenção estrutural.
           </p>
 
-          <table className="rp-table rp-table-tight">
-            <thead>
-              <tr><th>Fonte</th><th>Cargo</th><th>Pontos</th></tr>
-            </thead>
-            <tbody>
-              {sources.map((s, i) => (
-                <tr key={i}>
-                  <td><strong>{s.alias}</strong></td>
-                  <td>{s.role}</td>
-                  <td>{s.key_points.length}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="rp-sources">
-            {sources.map((s, i) => (
-              <div key={i} className="rp-source">
-                <div className="rp-source-head">
-                  <span className="rp-source-alias">{s.alias}</span>
-                  <span className="rp-source-role">{s.role}</span>
-                </div>
-                {s.key_points.length > 0 ? (
-                  <ul className="rp-source-pts">
-                    {s.key_points.map((kp, j) => <li key={j}>{kp}</li>)}
-                  </ul>
-                ) : (
-                  <p className="rp-dim-txt">Sem pontos registrados.</p>
-                )}
+          {evidenceMap.length > 0 && (
+            <>
+              <div className="rp-sub">Mapa de evidências</div>
+              <div className="rp-evid-lista">
+                {evidenceMap.map((e, i) => {
+                  const cfg = FORCA[e.strength] ?? FORCA.fonte_unica
+                  return (
+                    <div key={i} className={`rp-evid ${cfg.classe}`}>
+                      <div className="rp-evid-topo">
+                        <p className="rp-evid-achado">{e.finding}</p>
+                        <span className={`rp-evid-tag ${cfg.tag}`}>{cfg.rotulo}</span>
+                      </div>
+                      {e.supporting_sources.length > 0 && (
+                        <p className="rp-evid-fontes">
+                          {e.supporting_sources.length === 1 ? 'Fonte' : 'Fontes'}:{' '}
+                          {e.supporting_sources.join(', ')}
+                        </p>
+                      )}
+                      {e.note && <p className="rp-evid-nota">{e.note}</p>}
+                    </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
+            </>
+          )}
+
+          {divergences.length > 0 && (
+            <>
+              <div className="rp-sub">Divergências entre fontes</div>
+              <p className="rp-sub-lead">
+                Discordância costuma revelar que pessoas em posições diferentes enxergam partes
+                diferentes do processo — não que alguém esteja errado.
+              </p>
+              <div className="rp-div-lista">
+                {divergences.map((d, i) => (
+                  <div key={i} className="rp-div">
+                    <p className="rp-div-topico">{d.topic}</p>
+                    <div className="rp-div-pos">
+                      {d.positions.map((p, j) => (
+                        <div key={j} className="rp-div-linha">
+                          <div className="rp-div-quem">
+                            <span className="rp-div-alias">{p.alias}</span>
+                            <span className="rp-div-cargo">{p.role}</span>
+                          </div>
+                          <p className="rp-div-txt">{p.position}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {d.reading && (
+                      <p className="rp-div-leitura"><strong>Leitura:</strong> {d.reading}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {sensitiveObservations.length > 0 && (
+            <div className="rp-sensivel">
+              <div className="rp-sensivel-lbl">🔒 Observações sensíveis — não compartilhar</div>
+              <p className="rp-sensivel-aviso">
+                Contexto relevante para a decisão da liderança. Não aparece na devolutiva aos
+                participantes e não deve circular.
+              </p>
+              <ul className="rp-sensivel-lista">
+                {sensitiveObservations.map((o, i) => <li key={i}>{o}</li>)}
+              </ul>
+            </div>
+          )}
 
           <Footer n="05" />
         </section>
@@ -431,11 +480,64 @@ function ReportPrintableContent(props: ReportPrintableProps) {
         </section>
       )}
 
-      {/* ═══ 06 — ENCERRAMENTO ═══ */}
+      {/* ═══ 06 — FONTES ═══
+          Movido para o fim de propósito: é material de consulta, não linha de
+          raciocínio. O gestor que quiser conferir a origem de um achado vem
+          aqui; quem só precisa decidir para nas recomendações. */}
+      {sources.length > 0 && (
+        <section className="rp-page">
+          <Head section="ANEXO · FONTES CONSULTADAS" />
+
+          <div className="rp-sec-num">06 — ANEXO: FONTES</div>
+          <h2 className="rp-sec-title">De onde veio cada informação.</h2>
+          <p className="rp-sec-lead">
+            Material de consulta. Reúne os pontos-chave que cada fonte trouxe ao longo da
+            investigação, de forma anonimizada — use para rastrear a origem de um achado
+            específico. {sources.length} fonte(s), {totalKeyPoints} ponto(s) registrado(s).
+          </p>
+
+          <table className="rp-table rp-table-tight">
+            <thead>
+              <tr><th>Fonte</th><th>Cargo</th><th>Pontos</th></tr>
+            </thead>
+            <tbody>
+              {sources.map((s, i) => (
+                <tr key={i}>
+                  <td><strong>{s.alias}</strong></td>
+                  <td>{s.role}</td>
+                  <td>{s.key_points.length}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="rp-sources">
+            {sources.map((s, i) => (
+              <div key={i} className="rp-source">
+                <div className="rp-source-head">
+                  <span className="rp-source-alias">{s.alias}</span>
+                  <span className="rp-source-role">{s.role}</span>
+                </div>
+                {s.key_points.length > 0 ? (
+                  <ul className="rp-source-pts">
+                    {s.key_points.map((kp, j) => <li key={j}>{kp}</li>)}
+                  </ul>
+                ) : (
+                  <p className="rp-dim-txt">Sem pontos registrados.</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <Footer n="07" />
+        </section>
+      )}
+
+      {/* ═══ 07 — ENCERRAMENTO ═══ */}
       <section className="rp-page">
         <Head section="ENCERRAMENTO" />
 
-        <div className="rp-sec-num">06 — CONSIDERAÇÕES FINAIS</div>
+        <div className="rp-sec-num">07 — CONSIDERAÇÕES FINAIS</div>
         <h2 className="rp-sec-title">Próximos passos.</h2>
         <p className="rp-sec-lead">
           Este relatório é um instantâneo técnico: captura a causa raiz de um problema específico
@@ -481,7 +583,7 @@ function ReportPrintableContent(props: ReportPrintableProps) {
           </div>
         </div>
 
-        <Footer n="07" />
+        <Footer n="08" />
       </section>
     </div>
   )
@@ -520,6 +622,10 @@ const PRINT_CSS = `
      margem da página — antes o conteúdo transbordado encostava no topo do
      papel, porque o recuo existia só dentro do bloco. */
   @page { size: A4; margin: 16mm 18mm 15mm; }
+  /* A capa sangra até a borda do papel; só ela dispensa margem de página. As
+     margens negativas que tentavam isso antes deixavam faixas brancas nas
+     laterais, porque o bloco não chegava aos 210mm. */
+  @page :first { margin: 0; }
 
   .rp-page {
     box-sizing: border-box;
@@ -552,15 +658,13 @@ const PRINT_CSS = `
   }
 
   /* ── Capa ── */
-  /* Puxa a capa para fora das margens da página e devolve o recuo por dentro,
-     para o fundo escuro chegar até a borda do papel */
+  /* Sua página não tem margem (@page :first), então o recuo vem do padding */
   .rp-cover {
     background: #0F172A;
     color: #fff;
     justify-content: space-between;
-    margin: -16mm -18mm -15mm;
-    padding: 16mm 18mm 15mm;
-    min-height: 297mm;
+    padding: 20mm 18mm 16mm;
+    min-height: 296mm;   /* 1mm abaixo da folha: evita empurrar página em branco */
   }
   .rp-cover-brand { display: flex; align-items: center; gap: 3mm; }
   .rp-cover-mark {
@@ -740,6 +844,73 @@ const PRINT_CSS = `
   .rp-tag-off { background: #E2E8F0; color: #94A3B8; }
   .rp-dim-txt { font-size: 8pt; line-height: 1.6; color: #334155; margin: 0; }
   .rp-dim-empty .rp-dim-txt { color: #94A3B8; font-style: italic; }
+
+  /* ── Mapa de evidências ── */
+  .rp-sub-lead { font-size: 7.5pt; color: #64748B; margin: -1mm 0 3mm; line-height: 1.5; }
+
+  .rp-evid-lista { display: flex; flex-direction: column; gap: 3mm; margin-bottom: 2mm; }
+  .rp-evid {
+    border: .5pt solid #E2E8F0; border-left-width: 2pt; border-radius: 0 2mm 2mm 0;
+    padding: 3.5mm 4mm; page-break-inside: avoid; break-inside: avoid;
+  }
+  .rp-evid-ok    { border-left-color: #10B981; }
+  .rp-evid-unica { border-left-color: #F59E0B; }
+  .rp-evid-div   { border-left-color: #EF4444; }
+  .rp-evid-topo {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 3mm; margin-bottom: 1.5mm;
+  }
+  .rp-evid-achado { font-size: 8.5pt; line-height: 1.55; color: #0F172A; margin: 0; flex: 1; }
+  .rp-evid-tag {
+    font-size: 5.5pt; font-weight: 700; letter-spacing: .1em;
+    padding: .9mm 2mm; border-radius: 1mm; white-space: nowrap; flex-shrink: 0;
+  }
+  .rp-tag-ok    { background: #D1FAE5; color: #047857; }
+  .rp-tag-unica { background: #FEF3C7; color: #B45309; }
+  .rp-tag-div   { background: #FEE2E2; color: #B91C1C; }
+  .rp-evid-fontes {
+    font-size: 6pt; letter-spacing: .08em; text-transform: uppercase;
+    color: #94A3B8; margin: 0;
+  }
+  .rp-evid-nota { font-size: 7.5pt; color: #64748B; line-height: 1.5; margin: 1.5mm 0 0; }
+
+  /* ── Divergências ── */
+  .rp-div-lista { display: flex; flex-direction: column; gap: 3.5mm; margin-bottom: 2mm; }
+  .rp-div {
+    border: .5pt solid #FDE68A; background: #FFFBEB; border-radius: 2mm;
+    padding: 4mm; page-break-inside: avoid; break-inside: avoid;
+  }
+  .rp-div-topico { font-size: 8.5pt; font-weight: 700; color: #0F172A; margin: 0 0 2.5mm; }
+  .rp-div-pos { display: flex; flex-direction: column; gap: 2mm; }
+  .rp-div-linha { display: grid; grid-template-columns: 32mm 1fr; gap: 3mm; }
+  .rp-div-quem { display: flex; flex-direction: column; }
+  .rp-div-alias { font-size: 7.5pt; font-weight: 700; color: #334155; }
+  .rp-div-cargo { font-size: 6.5pt; color: #94A3B8; }
+  .rp-div-txt { font-size: 7.5pt; line-height: 1.55; color: #475569; margin: 0; }
+  .rp-div-leitura {
+    font-size: 7.5pt; line-height: 1.55; color: #92400E;
+    border-top: .5pt solid #FDE68A; padding-top: 2.5mm; margin: 3mm 0 0;
+  }
+
+  /* ── Observações sensíveis ── */
+  .rp-sensivel {
+    border: 1.5pt solid #FECACA; background: #FEF2F2; border-radius: 2mm;
+    padding: 5mm; margin-top: 5mm; page-break-inside: avoid; break-inside: avoid;
+  }
+  .rp-sensivel-lbl {
+    font-size: 7pt; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: #B91C1C; margin-bottom: 1.5mm;
+  }
+  .rp-sensivel-aviso { font-size: 7pt; color: #DC2626; line-height: 1.5; margin: 0 0 3mm; }
+  .rp-sensivel-lista { margin: 0; padding: 0; list-style: none; }
+  .rp-sensivel-lista li {
+    font-size: 8pt; line-height: 1.6; color: #334155;
+    padding-left: 4.5mm; margin-bottom: 2.5mm; position: relative;
+  }
+  .rp-sensivel-lista li::before {
+    content: ''; position: absolute; left: 0; top: 1.7mm;
+    width: 1.5mm; height: 1.5mm; border-radius: 50%; background: #F87171;
+  }
 
   /* ── Fontes ── */
   .rp-sources { display: flex; flex-direction: column; gap: 4mm; }

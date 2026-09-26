@@ -284,6 +284,9 @@ export function ReportView({ investigationTitle, report, problemDescription = ''
         sources={report.sources_summary ?? []}
         recommendations={report.recommendations}
         actionItems={report.action_items}
+        evidenceMap={report.evidence_map}
+        divergences={report.divergences}
+        sensitiveObservations={report.sensitive_observations}
       />
 
       {/* 1. CABEÇALHO */}
