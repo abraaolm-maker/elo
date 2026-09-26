@@ -303,8 +303,9 @@ const CSS = `
   .dv-foot {
     display: flex; justify-content: space-between;
     font-size: 6.5pt; color: #94A3B8; letter-spacing: .04em;
-    border-top: .5pt solid #E2E8F0; padding-top: 4mm; margin-top: 12mm;
+    border-top: .5pt solid #E2E8F0; padding-top: 4mm; margin-top: 6mm;
     break-inside: avoid;
+    break-before: avoid; page-break-before: avoid;
   }
 
   /* Sem min-height: 297mm exatos numa folha de 297mm faziam transbordar uma

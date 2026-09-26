@@ -696,12 +696,16 @@ const PRINT_CSS = `
   /* Sem flex no bloco da página, o rodapé flui após o conteúdo em vez de
      grudar na base — troca consciente: margem correta em toda folha vale mais
      do que rodapé fixado no pé */
+  /* Margem enxuta e break-before: avoid. O rodapé é a última coisa do bloco;
+     quando a seção fica a poucos milímetros de caber, era só ele que
+     transbordava — e a folha seguinte saía com o rodapé e mais nada. */
   .rp-foot {
-    margin-top: 10mm; padding-top: 5mm;
+    margin-top: 6mm; padding-top: 4mm;
     border-top: .5pt solid #E2E8F0;
     display: flex; justify-content: space-between;
     font-size: 6.5pt; color: #94A3B8; letter-spacing: .04em;
     break-inside: avoid;
+    break-before: avoid; page-break-before: avoid;
   }
 
   /* ── Capa ── */
@@ -770,7 +774,7 @@ const PRINT_CSS = `
   }
   .rp-sec-lead {
     font-size: 8.5pt; line-height: 1.6; color: #475569;
-    max-width: 150mm; margin: 0 0 8mm;
+    max-width: 150mm; margin: 0 0 6mm;
   }
   .rp-sub {
     font-size: 7pt; font-weight: 700; letter-spacing: .16em;
@@ -871,12 +875,12 @@ const PRINT_CSS = `
   .rp-table-tight td, .rp-table-tight th { padding: 2mm 3mm; }
 
   /* ── Dimensões Ishikawa ── */
-  .rp-dims { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-bottom: 6mm; }
+  /* Espaçamento enxuto: a seção estourava a folha por poucos milímetros e
+     jogava só o rodapé para a página seguinte */
+  .rp-dims { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-bottom: 4mm; }
   .rp-dim {
     border: .5pt solid #CCFBF1; background: #F0FDFA; border-radius: 2mm;
-    padding: 4mm; page-break-inside: avoid; break-inside: avoid;
-    /* Afasta do topo quando o card abre uma página nova */
-    margin-top: 1mm;
+    padding: 3.5mm; page-break-inside: avoid; break-inside: avoid;
   }
   .rp-dim-empty { border-color: #E2E8F0; background: #F8FAFC; }
   .rp-dim-head {
@@ -1008,10 +1012,10 @@ const PRINT_CSS = `
     font-size: 6.5pt; color: #64748B;
     border-left: .5pt solid #CBD5E1; padding-left: 2.5mm;
   }
-  .rp-tf-body { display: flex; flex-direction: column; gap: 4mm; }
+  .rp-tf-body { display: flex; flex-direction: column; gap: 3mm; }
   .rp-action {
     page-break-inside: avoid; break-inside: avoid;
-    border: .5pt solid #E2E8F0; border-radius: 2mm; padding: 4mm;
+    border: .5pt solid #E2E8F0; border-radius: 2mm; padding: 3.5mm;
   }
   .rp-action-head { display: flex; gap: 3mm; align-items: flex-start; margin-bottom: 2mm; }
   .rp-action-n {
