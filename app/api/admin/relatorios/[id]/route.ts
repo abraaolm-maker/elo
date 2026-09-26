@@ -2,6 +2,7 @@ import { db, schema } from '@/lib/db'
 import { requireAdmin, isForbiddenError, forbiddenResponse, unauthorizedResponse, isUnauthorizedError } from '@/lib/auth/middleware'
 import { eq, sum } from 'drizzle-orm'
 import { logError, logWarn } from '@/lib/monitoring/logger'
+import { enriquecerFontesComNomes } from '@/lib/ai/report-input'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,10 +61,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       cost_usd = Number(costRow?.usd ?? 0)
     } catch { /* api_usage_logs may not exist yet */ }
 
+    // Nome das fontes vem do cadastro na hora de exibir — assim relatórios
+    // antigos, gerados antes da identificação, também mostram quem falou
+    let reportComNomes = report
+    if (report?.sources_summary) {
+      try {
+        const fontes = JSON.parse(report.sources_summary) as { alias: string }[]
+        const comNomes = await enriquecerFontesComNomes(investigationId, fontes)
+        reportComNomes = { ...report, sources_summary: JSON.stringify(comNomes) }
+      } catch { /* mantém o original se o JSON estiver malformado */ }
+    }
+
     return Response.json({
       data: {
         investigation,
-        report,
+        report: reportComNomes,
         company_name: company?.name ?? '',
         cost_brl,
         cost_usd,

@@ -29,6 +29,48 @@ export interface ReportInputData {
   descartadasSemConteudo: number
 }
 
+/**
+ * Preenche o nome real de cada fonte a partir do cadastro, no momento de
+ * exibir o relatório.
+ *
+ * O nome NÃO é gravado junto do relatório de propósito. Se fosse, relatórios
+ * gerados antes desta funcionalidade ficariam para sempre sem nome, e corrigir
+ * o cadastro de alguém não se refletiria em nada já emitido. Buscando na hora,
+ * qualquer relatório — novo ou antigo — mostra o nome correto.
+ *
+ * Usado apenas no relatório gerencial. A devolutiva nunca chama isto.
+ */
+export async function enriquecerFontesComNomes<T extends { alias: string }>(
+  investigationId: string,
+  fontes: T[]
+): Promise<(T & { name?: string })[]> {
+  if (fontes.length === 0) return []
+
+  try {
+    const rows = await db
+      .select({
+        alias: schema.workers.anonymous_alias,
+        name: schema.workers.name,
+        full_name: schema.workers.full_name,
+      })
+      .from(schema.investigation_workers)
+      .innerJoin(schema.workers, eq(schema.investigation_workers.worker_id, schema.workers.id))
+      .where(eq(schema.investigation_workers.investigation_id, investigationId))
+
+    const porAlias = new Map(
+      rows.map(r => [r.alias, (r.full_name?.trim() || r.name?.trim()) || undefined])
+    )
+
+    return fontes.map(f => {
+      const nome = porAlias.get(f.alias)
+      return nome ? { ...f, name: nome } : f
+    })
+  } catch {
+    // Sem o nome o relatório ainda é utilizável — não vale derrubar a página
+    return fontes
+  }
+}
+
 /** Mensagens de um único worker — usado nas fases que processam fonte a fonte. */
 export function filtrarPorAlias(msgs: ReportMessageEntry[], alias: string): ReportMessageEntry[] {
   return msgs.filter(m => m.alias === alias)

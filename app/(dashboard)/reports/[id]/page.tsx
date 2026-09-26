@@ -10,6 +10,7 @@ import type {
   EvidenceItemOutput, DivergenceOutput, WorkerReportOutput,
 } from '@/lib/ai/types'
 import { DevolutivaSection, type DevolutivaData } from '@/components/reports/DevolutivaSection'
+import { enriquecerFontesComNomes } from '@/lib/ai/report-input'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -112,7 +113,12 @@ export default async function ReportPage({ params }: RouteParams) {
       confidence_score:        report.confidence_score,
       confidence_justification: report.confidence_justification,
       ishikawa_breakdown:      parseJsonSafe<IshikawaBreakdownOutput>(report.ishikawa_breakdown),
-      sources_summary:         parseJsonSafe<SourceSummaryOutput[]>(report.sources_summary),
+      // Nome buscado do cadastro agora, não do que ficou gravado — vale também
+      // para relatórios emitidos antes de a identificação existir
+      sources_summary:         await enriquecerFontesComNomes(
+                                 investigationId,
+                                 parseJsonSafe<SourceSummaryOutput[]>(report.sources_summary) ?? []
+                               ),
       recommendations:         parseJsonSafe<string[]>(report.recommendations) ?? [],
       generated_at:            report.generated_at,
       action_items:            actionItems,
