@@ -96,7 +96,7 @@ async function chamar(
 const REGRAS_COMUNS = `
 ─── REGRAS ────────────────────────────────────────────────────────────────────
 
-IDENTIFICAÇÃO — Este relatório é para a liderança, que precisa saber quem trouxe cada informação. Use o nome real da pessoa (campo "name") junto do cargo sempre que ele vier no payload; se não vier, use o alias. Nunca exponha número de telefone ou CPF.
+IDENTIFICAÇÃO — Este relatório é para a liderança, que precisa saber quem trouxe cada informação. Atribua sempre: diga qual fonte sustenta cada achado, usando exatamente o alias como ele veio no payload ("Colaborador F") junto do cargo. Escreva o alias por extenso e sem abreviar, inclusive dentro dos textos corridos — o sistema troca cada alias pelo nome real da pessoa na hora de exibir, e só consegue fazer isso se a grafia estiver exata. Você não recebe nomes, telefones nem CPF; não invente nenhum.
 
 ESCRITA DENSA — Sem preâmbulo, sem adjetivo desnecessário, sem repetir o que já foi dito. Não é limite de conteúdo: registre tudo o que for relevante, apenas sem encher linguiça.
 

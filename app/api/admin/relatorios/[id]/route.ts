@@ -2,7 +2,7 @@ import { db, schema } from '@/lib/db'
 import { requireAdmin, isForbiddenError, forbiddenResponse, unauthorizedResponse, isUnauthorizedError } from '@/lib/auth/middleware'
 import { eq, sum } from 'drizzle-orm'
 import { logError, logWarn } from '@/lib/monitoring/logger'
-import { enriquecerFontesComNomes } from '@/lib/ai/report-input'
+import { mapaDeNomes, identificarFontes, enriquecerFontes } from '@/lib/ai/report-input'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,14 +62,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     } catch { /* api_usage_logs may not exist yet */ }
 
     // Nome das fontes vem do cadastro na hora de exibir — assim relatórios
-    // antigos, gerados antes da identificação, também mostram quem falou
+    // antigos, gerados antes da identificação, também mostram quem falou.
+    // A troca alcança o alias escrito no meio da prosa, não só os campos
+    // estruturados, que é onde o relatório continuava anônimo.
     let reportComNomes = report
-    if (report?.sources_summary) {
+    if (report) {
+      const nomes = await mapaDeNomes(investigationId)
+
+      // O anexo de fontes é o único lugar que preserva o alias ao lado do nome
+      let fontes = report.sources_summary
       try {
-        const fontes = JSON.parse(report.sources_summary) as { alias: string }[]
-        const comNomes = await enriquecerFontesComNomes(investigationId, fontes)
-        reportComNomes = { ...report, sources_summary: JSON.stringify(comNomes) }
+        const lista = JSON.parse(report.sources_summary ?? '[]') as { alias: string }[]
+        fontes = JSON.stringify(enriquecerFontes(lista, nomes))
       } catch { /* mantém o original se o JSON estiver malformado */ }
+
+      reportComNomes = { ...identificarFontes(report, nomes), sources_summary: fontes }
     }
 
     return Response.json({

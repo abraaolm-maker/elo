@@ -807,6 +807,40 @@ equipamento, episódio) que permita deduzir quem falou. Além da instrução no 
 `removerAtribuicao()` em `worker-report-generator.ts` faz uma limpeza determinística
 antes de gravar.
 
+#### O nome real nunca é gravado nem enviado à IA
+
+O relatório gerencial identifica as fontes, mas o nome não existe em lugar nenhum do
+pipeline: a IA recebe só alias e cargo, e é isso que fica em `reports`. A troca por
+nome acontece **ao exibir**, em `lib/ai/report-input.ts`:
+
+| Função | Papel |
+|---|---|
+| `mapaDeNomes(investigationId)` | Lê alias → nome do cadastro (`full_name`, senão `name`) |
+| `identificarFontes(dados, nomes)` | Troca o alias por nome em qualquer string, em qualquer profundidade |
+| `enriquecerFontes(fontes, nomes)` | Anexa `name` **preservando** o alias |
+
+Aplicado em `app/(dashboard)/reports/[id]/page.tsx` e
+`app/api/admin/relatorios/[id]/route.ts`.
+
+Quatro consequências que justificam o desenho:
+
+1. relatórios emitidos antes da identificação passam a mostrar o nome, sem custo de IA;
+2. corrigir o cadastro de alguém se reflete em tudo que já foi emitido;
+3. a devolutiva deriva do gerencial gravado — como ele só tem alias, não há nome para vazar;
+4. nenhum nome de trabalhador trafega para a Anthropic.
+
+`identificarFontes` alcança o alias escrito no meio da prosa, não só os campos
+estruturados: era exatamente aí (`evidence_map[].note`, `divergences[].reading`,
+`confidence_justification`) que o relatório do gestor continuava dizendo
+"Colaborador G". Ela também desfaz o artigo que vinha com o alias —
+"o relato do Colaborador G" vira "o relato de Lethicia", não "do Lethicia" —
+porque "Colaborador" é masculino e a pessoa por trás dele pode não ser.
+
+**Por isso os prompts mandam escrever o alias exato e por extenso.** Se a IA abreviar
+("Colab. G") ou inventar um nome, a troca não acontece. O único lugar que mantém o
+alias visível é o anexo de fontes, que é como o gestor cruza o relatório com a
+conversa original na plataforma.
+
 ---
 
 ## 11. O que nunca fazer

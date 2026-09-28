@@ -315,7 +315,7 @@ Retorne APENAS um JSON válido, sem markdown:
 
 ─── REGRAS ────────────────────────────────────────────────────────────────────
 
-1. IDENTIFICAÇÃO — Este documento é da liderança, que precisa saber a origem de cada informação. Use o nome real (campo "name") junto do cargo quando ele vier no payload; sem nome, use o alias. Nunca exponha telefone ou CPF.
+1. IDENTIFICAÇÃO — Este documento é da liderança, que precisa saber a origem de cada informação. Atribua sempre, usando exatamente o alias como veio no payload ("Colaborador F") junto do cargo. Escreva o alias por extenso e sem abreviar, inclusive dentro dos textos corridos — o sistema troca cada alias pelo nome real da pessoa na hora de exibir, e só consegue fazer isso se a grafia estiver exata. Você não recebe nomes, telefones nem CPF; não invente nenhum.
 
 2. MAPA DE EVIDÊNCIAS — A liderança precisa saber o que está sólido e o que é hipótese. Liste no máximo 8 achados, os mais decisivos. Classifique cada um:
    - "corroborada": duas ou mais fontes independentes apontaram o mesmo, sem terem se comunicado

@@ -10,7 +10,7 @@ import type {
   EvidenceItemOutput, DivergenceOutput, WorkerReportOutput,
 } from '@/lib/ai/types'
 import { DevolutivaSection, type DevolutivaData } from '@/components/reports/DevolutivaSection'
-import { enriquecerFontesComNomes } from '@/lib/ai/report-input'
+import { mapaDeNomes, identificarFontes, enriquecerFontes } from '@/lib/ai/report-input'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -79,6 +79,9 @@ export default async function ReportPage({ params }: RouteParams) {
 
   let reportData: ReportData | null = null
   if (report) {
+    // Alias → nome real. A IA só trabalha com alias; quem identifica é a tela.
+    const nomes = await mapaDeNomes(investigationId)
+
     // Buscar action_items deste relatório
     const actionItemRows = await db
       .select()
@@ -103,25 +106,32 @@ export default async function ReportPage({ params }: RouteParams) {
       status:               ai.status,
     }))
 
+    // identificarFontes alcança também o alias escrito no meio da prosa —
+    // causa raiz, Ishikawa, notas de evidência, leitura das divergências,
+    // observações sensíveis e plano de ação. Vale para relatórios antigos.
     reportData = {
-      id:                      report.id,
-      investigation_id:        report.investigation_id,
-      evidence_map:            parseJsonSafe<EvidenceItemOutput[]>(report.evidence_map) ?? [],
-      divergences:             parseJsonSafe<DivergenceOutput[]>(report.divergences) ?? [],
-      sensitive_observations:  parseJsonSafe<string[]>(report.sensitive_observations) ?? [],
-      root_cause:              report.root_cause,
-      confidence_score:        report.confidence_score,
-      confidence_justification: report.confidence_justification,
-      ishikawa_breakdown:      parseJsonSafe<IshikawaBreakdownOutput>(report.ishikawa_breakdown),
-      // Nome buscado do cadastro agora, não do que ficou gravado — vale também
-      // para relatórios emitidos antes de a identificação existir
-      sources_summary:         await enriquecerFontesComNomes(
-                                 investigationId,
-                                 parseJsonSafe<SourceSummaryOutput[]>(report.sources_summary) ?? []
-                               ),
-      recommendations:         parseJsonSafe<string[]>(report.recommendations) ?? [],
-      generated_at:            report.generated_at,
-      action_items:            actionItems,
+      ...identificarFontes({
+        id:                      report.id,
+        investigation_id:        report.investigation_id,
+        evidence_map:            parseJsonSafe<EvidenceItemOutput[]>(report.evidence_map) ?? [],
+        divergences:             parseJsonSafe<DivergenceOutput[]>(report.divergences) ?? [],
+        sensitive_observations:  parseJsonSafe<string[]>(report.sensitive_observations) ?? [],
+        root_cause:              report.root_cause,
+        confidence_score:        report.confidence_score,
+        confidence_justification: report.confidence_justification,
+        ishikawa_breakdown:      parseJsonSafe<IshikawaBreakdownOutput>(report.ishikawa_breakdown),
+        recommendations:         parseJsonSafe<string[]>(report.recommendations) ?? [],
+        generated_at:            report.generated_at,
+        action_items:            actionItems,
+      }, nomes),
+
+      // Fora da troca de propósito: o anexo de fontes é o único lugar que
+      // mantém o alias, e é por ele que o gestor cruza o relatório com a
+      // conversa original na plataforma
+      sources_summary: enriquecerFontes(
+        parseJsonSafe<SourceSummaryOutput[]>(report.sources_summary) ?? [],
+        nomes
+      ),
     }
   }
 

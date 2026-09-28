@@ -81,9 +81,9 @@ export async function POST(request: Request, { params }: RouteParams): Promise<R
       problem_description: investigation.problem_description,
     }
 
-    // comNomes: o relatório gerencial identifica quem disse o quê
+    // A IA trabalha só com alias; o nome real entra ao exibir o relatório
     const { allMessages, workerAliases, descartadasSemConteudo } =
-      await montarEntradaRelatorio(investigationId, { comNomes: true })
+      await montarEntradaRelatorio(investigationId)
 
     // ── Fase: análise ────────────────────────────────────────────────────────
     if (fase === 'analise') {

@@ -242,7 +242,7 @@ function ReportPrintableContent(props: ReportPrintableProps) {
         <p className="rp-sec-lead">
           A investigação segue metodologias consolidadas de análise de causa raiz e pesquisa
           qualitativa, automatizadas pelo Elo. A coleta ocorre diretamente com quem executa o
-          trabalho, preservando o anonimato das fontes em todas as etapas.
+          trabalho, em entrevistas individuais: nenhuma fonte soube o que as outras responderam.
         </p>
 
         <div className="rp-steps">
@@ -294,9 +294,11 @@ function ReportPrintableContent(props: ReportPrintableProps) {
         </table>
 
         <div className="rp-note">
-          <strong>Sobre anonimato.</strong> As fontes são identificadas exclusivamente por alias
-          (Colaborador A, B, C…) e cargo. Nomes, números de telefone e qualquer dado que permita
-          identificação individual não constam deste documento nem são acessíveis na plataforma.
+          <strong>Sobre identificação.</strong> Neste documento, destinado à liderança, cada fonte
+          é identificada pelo nome e pelo cargo — decidir exige saber quem observou o quê. O
+          anonimato se aplica à coleta, em que nenhuma fonte soube o que a outra respondeu, e à
+          devolutiva entregue aos participantes, que não atribui nada a ninguém. Números de
+          telefone e demais dados de contato não constam deste relatório.
         </div>
 
         <Footer n="03" />
@@ -544,9 +546,10 @@ function ReportPrintableContent(props: ReportPrintableProps) {
 
         <div className="rp-note">
           <strong>Sigilo.</strong> Este documento é confidencial e destinado exclusivamente à
-          liderança de {companyName}. Contém informações operacionais sensíveis obtidas sob
-          garantia de anonimato às fontes. A reprodução ou redistribuição depende de autorização
-          expressa. As respostas originais permanecem em ambiente seguro da plataforma Elo.
+          liderança de {companyName}. Contém informações operacionais sensíveis e identifica quem
+          relatou cada uma delas. A reprodução ou redistribuição depende de autorização expressa —
+          para circular entre os participantes existe a devolutiva, que não atribui nada a
+          ninguém. As respostas originais permanecem em ambiente seguro da plataforma Elo.
         </div>
 
         <div className="rp-sign">
@@ -579,8 +582,9 @@ function ReportPrintableContent(props: ReportPrintableProps) {
           <h2 className="rp-sec-title">De onde veio cada informação.</h2>
           <p className="rp-sec-lead">
             Material de consulta. Reúne os pontos-chave que cada fonte trouxe ao longo da
-            investigação, de forma anonimizada — use para rastrear a origem de um achado
-            específico. {sources.length} fonte(s), {totalKeyPoints} ponto(s) registrado(s).
+            investigação — use para rastrear a origem de um achado específico. O código ao lado
+            do nome é o mesmo que identifica a conversa na plataforma.{' '}
+            {sources.length} fonte(s), {totalKeyPoints} ponto(s) registrado(s).
           </p>
 
           <table className="rp-table rp-table-tight">
